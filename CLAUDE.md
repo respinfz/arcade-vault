@@ -22,16 +22,10 @@ npx skills@latest add Klerith/fernando-skills
 
 These skills are not yet installed in this environment (no `.claude/skills` or spec files present). If asked to implement a feature, check whether `/spec` should be run first to produce a spec before `/spec-impl` implements it.
 
-## Commands
 
-```bash
-npm run dev     # start dev server (Next.js, with Turbopack unless configured otherwise)
-npm run build   # production build
-npm run start   # run production build
-npm run lint    # eslint via eslint.config.mjs (flat config, extends eslint-config-next core-web-vitals + typescript)
-```
+## Skills
+Always use /frontend-design to design user interfaces.
 
-There is no test setup in this repo yet (no test runner configured in `package.json`).
 
 ## Architecture
 
