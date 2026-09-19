@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Press_Start_2P, JetBrains_Mono } from "next/font/google";
+import { UserProvider } from "@/components/providers/user-provider";
 import "./globals.css";
 
 const pixelFont = Press_Start_2P({
@@ -29,9 +30,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${pixelFont.variable} ${monoFont.variable}`}
     >
       <body>
-        <div className="av-bg" aria-hidden="true" />
-        <div className="av-noise" aria-hidden="true" />
-        <main className="av-main">{children}</main>
+        <UserProvider>
+          <div className="av-bg" aria-hidden="true" />
+          <div className="av-noise" aria-hidden="true" />
+          <main className="av-main">{children}</main>
+        </UserProvider>
       </body>
     </html>
   );
