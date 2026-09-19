@@ -14,3 +14,14 @@ https://github.com/Klerith/fernando-skills
 ```bash
 npx skills@latest add Klerith/fernando-skills
 ```
+
+## Commands
+
+```bash
+npm run dev     # start dev server (Next.js, with Turbopack unless configured otherwise)
+npm run build   # production build
+npm run start   # run production build
+npm run lint    # eslint via eslint.config.mjs (flat config, extends eslint-config-next core-web-vitals + typescript)
+```
+
+There is no test setup in this repo yet (no test runner configured in `package.json`).
