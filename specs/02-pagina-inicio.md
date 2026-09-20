@@ -1,6 +1,6 @@
 # SPEC 02 — Página de Inicio (landing) de Arcade Vault
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Date:** 2026-09-20
 > **Depends on:** SPEC 01
 > **Objective:** Implementar la pantalla de Inicio (landing marketing) en `/`, portada desde `references/templates/home-about/home.jsx`, moviendo la Biblioteca (pantalla actual de `/`) a `/biblioteca` y actualizando el nav y los links internos en consecuencia.
