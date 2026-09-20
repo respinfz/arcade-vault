@@ -199,6 +199,7 @@ export default function AcercaDe() {
           <form
             className={"contact-form" + (shake ? " shake" : "")}
             onSubmit={onSubmit}
+            noValidate
           >
             {!sent ? (
               <>
