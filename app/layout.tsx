@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Press_Start_2P, JetBrains_Mono } from "next/font/google";
+import { UserProvider } from "@/components/providers/user-provider";
+import { Nav } from "@/components/nav";
 import "./globals.css";
 
 const pixelFont = Press_Start_2P({
@@ -29,9 +31,25 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${pixelFont.variable} ${monoFont.variable}`}
     >
       <body>
-        <div className="av-bg" aria-hidden="true" />
-        <div className="av-noise" aria-hidden="true" />
-        <main className="av-main">{children}</main>
+        <UserProvider>
+          <div className="av-bg" aria-hidden="true" />
+          <div className="av-noise" aria-hidden="true" />
+          <Nav />
+          <main className="av-main">{children}</main>
+          <footer
+            style={{
+              borderTop: "1px solid var(--line)",
+              padding: "20px 32px",
+              textAlign: "center",
+              color: "var(--ink-faint)",
+              fontFamily: "var(--mono)",
+              fontSize: 11,
+              letterSpacing: "0.16em",
+            }}
+          >
+            © 2026 ARCADE VAULT · HECHO CON PIXELES Y NEÓN · v2.6.0
+          </footer>
+        </UserProvider>
       </body>
     </html>
   );

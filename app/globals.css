@@ -121,7 +121,10 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ===== app frame ===== */
-.av-main { flex: 1; }
+/* transform forces its own compositing layer: without it, Chromium's software
+   rasterizer intermittently fails to paint this subtree's content (block text,
+   flex rows) when it sits beside sibling layers from .av-bg/.card/.av-hero h1 */
+.av-main { flex: 1; transform: translateZ(0); }
 
 /* ===== pixel + neon text ===== */
 .pixel { font-family: var(--pixel); letter-spacing: 0.04em; line-height: 1.25; text-transform: uppercase; }
