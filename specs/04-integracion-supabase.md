@@ -1,6 +1,6 @@
 # SPEC 04 — Integración base con Supabase
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 01
 > **Date:** 2026-09-21
 > **Objective:** Dejar el proyecto conectado a Supabase (paquetes, clientes de navegador/servidor, CLI enlazado al proyecto y una ruta de diagnóstico) sin implementar todavía ninguna feature real de auth ni de datos.
