@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tetris</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrapper">
+    <div class="title-bar">
+      <h1 class="game-title">TETRIS</h1>
+      <select id="skin-select" class="skin-select" aria-label="Skin visual" title="Cambiar skin visual">
+        <option value="retro">Retro</option>
+        <option value="neon">Neon</option>
+        <option value="pastel">Pastel</option>
+        <option value="pixel">Pixel art</option>
+      </select>
+      <button id="sound-toggle" class="icon-btn" type="button" aria-pressed="true" title="Activar/silenciar sonido">🔊</button>
+      <label class="theme-switch" title="Cambiar tema claro/oscuro">
+        <input type="checkbox" id="theme-toggle" aria-label="Modo claro" />
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="game-container">
+      <canvas id="board" width="300" height="600"></canvas>
+
+      <aside class="panel">
+        <div class="panel-section">
+          <span class="label">SCORE</span>
+          <span class="value" id="score">0</span>
+        </div>
+        <div class="panel-section">
+          <span class="label">LINES</span>
+          <span class="value" id="lines">0</span>
+        </div>
+        <div class="panel-section">
+          <span class="label">LEVEL</span>
+          <span class="value" id="level">1</span>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">COMBO</span>
+          <span class="value" id="combo">x1</span>
+          <p class="hint">Limpia líneas en turnos seguidos para multiplicar la puntuación (hasta x5). Las bombas y rayos no rompen la cadena.</p>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">NEXT</span>
+          <canvas id="next-canvas" width="120" height="120"></canvas>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">POWER-UP</span>
+          <p class="hint">💣 Bomba: al caer destruye un área 3×3 y los bloques de encima caen.</p>
+          <p class="hint">⚡ Rayo: limpia la fila o la columna donde cae; pulsa ↑ para girar su orientación.</p>
+          <p class="hint">Cada 10 líneas aparece un power-up, alternando bomba y rayo.</p>
+        </div>
+
+        <div class="panel-section controls">
+          <span class="label">CONTROLS</span>
+          <ul>
+            <li><kbd>←</kbd><kbd>→</kbd> mover</li>
+            <li><kbd>↑</kbd> rotar</li>
+            <li><kbd>↓</kbd> bajar</li>
+            <li><kbd>Space</kbd> caída</li>
+            <li><kbd>P</kbd> / <kbd>Esc</kbd> pausa</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <div id="overlay" class="overlay hidden">
+      <div class="overlay-box">
+        <p id="overlay-title">TETRIS</p>
+        <p id="overlay-score"></p>
+        <div id="name-entry" class="name-entry hidden">
+          <input id="name-input" type="text" maxlength="12" placeholder="Tu nombre"
+                 autocomplete="off" spellcheck="false" aria-label="Nombre del jugador" />
+          <button id="save-score-btn" type="button">Guardar</button>
+        </div>
+        <div id="records" class="records"></div>
+        <button id="restart-btn">Empezar</button>
+        <button id="reset-records-btn" type="button" class="ghost-btn hidden">Borrar récords</button>
+      </div>
+    </div>
+
+    <div id="pause-menu" class="overlay hidden">
+      <div class="overlay-box pause-box">
+        <p class="pause-title">PAUSA</p>
+
+        <div class="pause-actions">
+          <button id="resume-btn" type="button">Reanudar</button>
+          <button id="pause-restart-btn" type="button">Reiniciar</button>
+          <button id="toggle-controls-btn" type="button" aria-expanded="false" aria-controls="pause-controls">Ver controles</button>
+        </div>
+
+        <div id="pause-controls" class="pause-controls hidden">
+          <ul>
+            <li><kbd>←</kbd><kbd>→</kbd> mover</li>
+            <li><kbd>↑</kbd> / <kbd>X</kbd> rotar</li>
+            <li><kbd>↓</kbd> bajar</li>
+            <li><kbd>Space</kbd> caída rápida</li>
+            <li><kbd>P</kbd> / <kbd>Esc</kbd> pausa</li>
+          </ul>
+        </div>
+
+        <div class="pause-level">
+          <span class="label">NIVEL INICIAL</span>
+          <div class="level-picker">
+            <button id="level-down" type="button" aria-label="Bajar nivel inicial">−</button>
+            <span id="start-level-value">1</span>
+            <button id="level-up" type="button" aria-label="Subir nivel inicial">+</button>
+          </div>
+          <p class="hint">Se aplica al empezar una nueva partida.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
