@@ -10,11 +10,12 @@ export interface Game {
   plays: string;
 }
 
-export interface ScoreRow {
-  rank: number;
+export interface Score {
+  id: number;
+  gameId: string;
   name: string;
   score: number;
-  date: string; // dd/mm/yyyy
+  createdAt: string;
 }
 
 export interface User {
@@ -22,8 +23,7 @@ export interface User {
 }
 
 export interface ScoreEntry {
-  game: string; // Game["id"]
+  gameId: string;
   score: number;
   name: string;
-  at: number; // Date.now()
 }
