@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { GAMES, seededScores } from "@/lib/data";
+import { getGameById, getTopScores } from "@/lib/supabase/queries";
 
 export default async function GameDetailPage({
   params,
 }: PageProps<"/juegos/[id]">) {
   const { id } = await params;
-  const game = GAMES.find((g) => g.id === id);
+  const game = await getGameById(id);
   if (!game) notFound();
 
-  const scores = seededScores(id.length * 17 + 3, 10);
+  const scores = await getTopScores(id, 10);
+  const best =
+    scores.length > 0 ? Math.max(...scores.map((s) => s.score)) : game.best;
 
   return (
     <div className="av-detail fade-in">
@@ -40,7 +42,7 @@ export default async function GameDetailPage({
                   textShadow: "0 0 6px rgba(255,0,110,0.5)",
                 }}
               >
-                {game.best.toLocaleString("es-ES")}
+                {best.toLocaleString("es-ES")}
               </div>
             </div>
             <div>
@@ -58,7 +60,7 @@ export default async function GameDetailPage({
           </div>
           <div className="detail-actions">
             <Link href={`/juegos/${game.id}/jugar`} className="btn xl pulse">
-              ▶  JUGAR AHORA
+              ▶ JUGAR AHORA
             </Link>
             <Link href="/biblioteca" className="btn ghost lg">
               VOLVER AL VAULT
@@ -70,15 +72,26 @@ export default async function GameDetailPage({
       <aside>
         <div className="leaderboard">
           <h3>MEJORES PUNTUACIONES</h3>
+          {scores.length === 0 && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "32px 0",
+                color: "var(--ink-faint)",
+              }}
+            >
+              AÚN NO HAY PUNTAJES
+            </div>
+          )}
           {scores.map((r, i) => (
             <div
-              key={r.name}
+              key={r.id}
               className={
                 "lb-row" +
                 (i === 0 ? " top1" : i === 1 ? " top2" : i === 2 ? " top3" : "")
               }
             >
-              <div className="rk">#{String(r.rank).padStart(2, "0")}</div>
+              <div className="rk">#{String(i + 1).padStart(2, "0")}</div>
               <div className="pl">
                 {r.name}
                 <div
@@ -88,7 +101,7 @@ export default async function GameDetailPage({
                     letterSpacing: "0.1em",
                   }}
                 >
-                  {r.date}
+                  {new Date(r.createdAt).toLocaleDateString("es-ES")}
                 </div>
               </div>
               <div className="sc">{r.score.toLocaleString("es-ES")}</div>
