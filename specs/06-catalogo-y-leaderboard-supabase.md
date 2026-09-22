@@ -1,6 +1,6 @@
 # SPEC 06 — Catálogo de juegos y leaderboard real en Supabase
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 01, SPEC 04, SPEC 05
 > **Date:** 2026-09-21
 > **Objective:** Migrar el catálogo de juegos (`GAMES`) y el leaderboard (hoy `seededScores` mock + `localStorage["av_scores"]`) a dos tablas reales de Supabase (`av_games`, `av_scores`), para que Biblioteca, Inicio, Detalle y Salón de la Fama lean y escriban datos reales en vez de datos hardcodeados/mock.
