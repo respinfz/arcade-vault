@@ -1,9 +1,14 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GAMES } from "@/lib/data";
 import { useUser } from "@/components/providers/user-provider";
+import {
+  AsteroidsGame,
+  type AsteroidsGameHandle,
+} from "@/components/games/asteroids/asteroids-game";
+import { TouchControls } from "@/components/games/asteroids/touch-controls";
 
 export default function GamePlayerPage({
   params,
@@ -12,6 +17,9 @@ export default function GamePlayerPage({
   const game = GAMES.find((g) => g.id === id);
   const router = useRouter();
   const { user, saveScore } = useUser();
+  const gameRef = useRef<AsteroidsGameHandle>(null);
+
+  const isAsteroids = game?.id === "asteroides";
 
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -22,22 +30,30 @@ export default function GamePlayerPage({
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (!game || over || paused) return;
-    const t = setInterval(
-      () => setScore((s) => s + Math.floor(10 + Math.random() * 90)),
-      220
-    );
+    if (!game || over || paused || isAsteroids) return;
+    const t = setInterval(() => {
+      setScore((s) => {
+        const next = s + Math.floor(10 + Math.random() * 90);
+        if (next > 0 && next % 2500 < 100) setLevel((l) => l + 1);
+        return next;
+      });
+    }, 220);
     return () => clearInterval(t);
-  }, [game, over, paused]);
-
-  useEffect(() => {
-    if (score > 0 && score % 2500 < 100) setLevel((l) => l + 1);
-  }, [score]);
+  }, [game, over, paused, isAsteroids]);
 
   if (!game) return null;
 
-  const endGame = () => setOver(true);
+  const endGame = () => {
+    if (isAsteroids) {
+      gameRef.current?.forceGameOver();
+    } else {
+      setOver(true);
+    }
+  };
   const restart = () => {
+    if (isAsteroids) {
+      gameRef.current?.restart();
+    }
     setScore(0);
     setLives(3);
     setLevel(1);
@@ -87,13 +103,30 @@ export default function GamePlayerPage({
 
       <div className="crt">
         <div className="crt-screen">
-          <div className="game-arena">
-            <div className="grid-floor"></div>
-            <div className="enemy e1"></div>
-            <div className="enemy e2"></div>
-            <div className="enemy e3"></div>
-            <div className="player-ship"></div>
-          </div>
+          {isAsteroids ? (
+            <>
+              <AsteroidsGame
+                ref={gameRef}
+                paused={paused}
+                onScoreChange={setScore}
+                onLivesChange={setLives}
+                onLevelChange={setLevel}
+                onGameOver={(finalScore) => {
+                  setScore(finalScore);
+                  setOver(true);
+                }}
+              />
+              <TouchControls gameRef={gameRef} />
+            </>
+          ) : (
+            <div className="game-arena">
+              <div className="grid-floor"></div>
+              <div className="enemy e1"></div>
+              <div className="enemy e2"></div>
+              <div className="enemy e3"></div>
+              <div className="player-ship"></div>
+            </div>
+          )}
           {paused && (
             <div
               className="crt-content"
