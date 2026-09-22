@@ -16,6 +16,10 @@ const PREVENT_DEFAULT_CODES = [
 export interface AsteroidsGameHandle {
   restart: () => void;
   forceGameOver: () => void;
+  pressLeft: (held: boolean) => void;
+  pressRight: (held: boolean) => void;
+  pressThrust: (held: boolean) => void;
+  pressShoot: () => void;
 }
 
 export interface AsteroidsGameProps {
@@ -58,6 +62,18 @@ export const AsteroidsGame = forwardRef<
     () => ({
       restart: () => engineRef.current?.restart(),
       forceGameOver: () => engineRef.current?.forceGameOver(),
+      pressLeft: (held: boolean) => {
+        inputRef.current.keys["ArrowLeft"] = held;
+      },
+      pressRight: (held: boolean) => {
+        inputRef.current.keys["ArrowRight"] = held;
+      },
+      pressThrust: (held: boolean) => {
+        inputRef.current.keys["ArrowUp"] = held;
+      },
+      pressShoot: () => {
+        inputRef.current.justPressed["Space"] = true;
+      },
     }),
     [],
   );
