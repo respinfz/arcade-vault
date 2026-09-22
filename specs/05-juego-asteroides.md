@@ -1,6 +1,6 @@
 # SPEC 05 — Primer juego real: Asteroides
 
-> **Status:** Approved
+> **Status:** Implementado
 > **Depends on:** SPEC 01, SPEC 02
 > **Date:** 2026-09-21
 > **Objective:** Portar el juego Asteroids ya creado en `references/started-games/02-asteroids/` a un componente React real que se juega en `/juegos/asteroides/jugar`, agregando su tarjeta al catálogo e integrando ese juego con el HUD, la pausa, el game over, el guardado de puntaje y controles táctiles que ya existen en la plataforma.
