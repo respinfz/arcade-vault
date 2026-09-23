@@ -8,6 +8,8 @@ import type {
   RefAttributes,
   RefObject,
 } from "react";
+import { ArkanoidGame } from "@/components/games/arkanoid/arkanoid-game";
+import { TouchControls as ArkanoidTouchControls } from "@/components/games/arkanoid/touch-controls";
 import { AsteroidsGame } from "@/components/games/asteroids/asteroids-game";
 import { TouchControls as AsteroidsTouchControls } from "@/components/games/asteroids/touch-controls";
 import { TetrisGame } from "@/components/games/tetris/tetris-game";
@@ -38,6 +40,11 @@ export interface GameRegistryEntry {
 // runtime cualquier handle específico cumple GameHandle sin problema; se castea en este
 // único punto de registro en vez de debilitar los tipos de cada componente.
 export const GAME_REGISTRY: Record<string, GameRegistryEntry> = {
+  arkanoid: {
+    Component: ArkanoidGame as unknown as GameRegistryEntry["Component"],
+    TouchControls:
+      ArkanoidTouchControls as unknown as GameRegistryEntry["TouchControls"],
+  },
   asteroides: {
     Component: AsteroidsGame as unknown as GameRegistryEntry["Component"],
     TouchControls:

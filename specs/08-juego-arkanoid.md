@@ -1,6 +1,6 @@
 # SPEC 08 — Juego: Arkanoid
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 05, SPEC 06
 > **Date:** 2026-09-22
 > **Objective:** Portar el juego de `references/started-games/04-arkanoid/` a un componente React real jugable en `/juegos/arkanoid/jugar`, reemplazando la tarjeta placeholder `bloque-buster` del catálogo, con motor propio sin sprites ni sonido, HUD sincronizado, controles táctiles y leaderboard real en `av_scores`.
@@ -71,7 +71,7 @@ Coordenadas del canvas lógico 800×600 (rediseño del campo 480×640 original, 
 
 - Grilla de bloques: `BLOCK_COLS = 15`, `BLOCK_ROWS = 7`, `BLOCK_W = 32`, `BLOCK_H = 16` (idénticos al original: 480×112px), posicionada en `x = 160` (centrado: `(800 - 480) / 2`), `y = 30` (debajo de una franja de HUD de 20px de alto).
 - Pala: mismos anchos por nivel que el original (122 a 162px según `LEVELS[i].paddleWidth`), misma velocidad (6px/frame), reposicionada a `y = 560` (antes `y = 600` sobre un canvas de 640 de alto).
-- Bola: mismo tamaño (16×16) y velocidad base (`BALL_SPEED = 5`, multiplicada por `ballSpeedMultiplier` de cada nivel), reposicionada relativa a la nueva `y` de la pala.
+- Bola: mismo tamaño (16×16) y velocidad base `BALL_SPEED = 15` (3x la velocidad original de 5, decisión explícita del usuario tras jugar la primera implementación), multiplicada por `ballSpeedMultiplier` de cada nivel, reposicionada relativa a la nueva `y` de la pala.
 - Los márgenes izquierdo/derecho (160px cada uno) quedan como fondo decorativo, sin controles ni HUD adicional ahí.
 - Efecto de rotura de bloque: en vez de las 4 frames de sprite del original, un flash simple (rectángulo del color de la fila, opacidad de 1 a 0 en ~150ms) en la posición del bloque roto.
 

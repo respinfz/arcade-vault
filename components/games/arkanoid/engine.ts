@@ -124,7 +124,7 @@ const PADDLE_H = 14;
 const PADDLE_SPEED = 6; // px/frame, idéntico al original (update() se llama 1x por rAF)
 
 const BALL_SIZE = 16;
-const BALL_SPEED = 5; // px/frame antes de aplicar ballSpeedMultiplier
+const BALL_SPEED = 15; // px/frame antes de aplicar ballSpeedMultiplier (3x la velocidad original de 5)
 const MAX_BOUNCE_ANGLE = Math.PI / 3; // 60 grados desde la vertical
 
 const BREAK_FLASH_MS = 150;
@@ -219,6 +219,11 @@ export class ArkanoidEngine {
     this.ball.attached = true;
     this.ball.vx = 0;
     this.ball.vy = 0;
+    // Posiciona la bola ya mismo (no solo en la próxima rama "attached" de updateBall):
+    // si el jugador presiona Espacio en el primerísimo frame, launchBall() se dispara
+    // antes de que updateBall() llegue a correr con la bola todavía pegada a la pala.
+    this.ball.x = this.paddle.x + this.paddle.w / 2 - this.ball.w / 2;
+    this.ball.y = this.paddle.y - this.ball.h;
   }
 
   restart() {
