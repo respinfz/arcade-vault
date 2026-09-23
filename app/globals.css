@@ -1287,6 +1287,50 @@ a {
   box-shadow: 0 0 16px rgba(245, 255, 0, 0.6);
 }
 
+/* cruceta de 4 direcciones (Snake): es el único control del juego, sin botón
+   de acción, así que ocupa el centro inferior de la pantalla en vez de una
+   esquina como .touch-controls-move (que reserva la otra esquina para un
+   botón de fuego que este juego no tiene). */
+.touch-controls-dpad {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  grid-template-areas:
+    ". up ."
+    "left . right"
+    ". down .";
+  gap: 6px;
+  pointer-events: auto;
+}
+.touch-controls-dpad .touch-btn {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+  color: var(--green);
+  background: rgba(0, 255, 136, 0.08);
+  border-color: var(--green);
+}
+.touch-controls-dpad .touch-btn:active {
+  background: rgba(0, 255, 136, 0.25);
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.55);
+}
+.touch-controls-dpad .touch-btn:nth-child(1) {
+  grid-area: up;
+}
+.touch-controls-dpad .touch-btn:nth-child(2) {
+  grid-area: left;
+}
+.touch-controls-dpad .touch-btn:nth-child(3) {
+  grid-area: right;
+}
+.touch-controls-dpad .touch-btn:nth-child(4) {
+  grid-area: down;
+}
+
 /* game over modal */
 .modal-bd {
   position: fixed;
