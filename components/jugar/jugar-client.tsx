@@ -3,19 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/components/providers/user-provider";
-import {
-  AsteroidsGame,
-  type AsteroidsGameHandle,
-} from "@/components/games/asteroids/asteroids-game";
-import { TouchControls } from "@/components/games/asteroids/touch-controls";
+import { GAME_REGISTRY, type GameHandle } from "@/components/games/registry";
 import type { Game } from "@/lib/types";
 
 export default function JugarClient({ game }: { game: Game }) {
   const router = useRouter();
   const { user, saveScore } = useUser();
-  const gameRef = useRef<AsteroidsGameHandle>(null);
+  const gameRef = useRef<GameHandle>(null);
 
-  const isAsteroids = game.id === "asteroides";
+  const entry = GAME_REGISTRY[game.id];
 
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -26,7 +22,7 @@ export default function JugarClient({ game }: { game: Game }) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (over || paused || isAsteroids) return;
+    if (over || paused || entry) return;
     const t = setInterval(() => {
       setScore((s) => {
         const next = s + Math.floor(10 + Math.random() * 90);
@@ -35,17 +31,17 @@ export default function JugarClient({ game }: { game: Game }) {
       });
     }, 220);
     return () => clearInterval(t);
-  }, [over, paused, isAsteroids]);
+  }, [over, paused, entry]);
 
   const endGame = () => {
-    if (isAsteroids) {
+    if (entry) {
       gameRef.current?.forceGameOver();
     } else {
       setOver(true);
     }
   };
   const restart = () => {
-    if (isAsteroids) {
+    if (entry) {
       gameRef.current?.restart();
     }
     setScore(0);
@@ -71,8 +67,12 @@ export default function JugarClient({ game }: { game: Game }) {
             <div className="v">{score.toLocaleString("es-ES")}</div>
           </div>
           <div className="hud-stat lives">
-            <div className="l">Vidas</div>
-            <div className="v">{"♥ ".repeat(lives).trim() || "—"}</div>
+            <div className="l">{entry?.hudLivesLabel ?? "Vidas"}</div>
+            <div className="v">
+              {(entry?.hudLivesLabel ?? "Vidas") === "Vidas"
+                ? "♥ ".repeat(lives).trim() || "—"
+                : lives}
+            </div>
           </div>
           <div className="hud-stat level">
             <div className="l">Nivel</div>
@@ -97,9 +97,9 @@ export default function JugarClient({ game }: { game: Game }) {
 
       <div className="crt">
         <div className="crt-screen">
-          {isAsteroids ? (
+          {entry ? (
             <>
-              <AsteroidsGame
+              <entry.Component
                 ref={gameRef}
                 paused={paused}
                 onScoreChange={setScore}
@@ -110,7 +110,7 @@ export default function JugarClient({ game }: { game: Game }) {
                   setOver(true);
                 }}
               />
-              <TouchControls gameRef={gameRef} />
+              {entry.TouchControls && <entry.TouchControls gameRef={gameRef} />}
             </>
           ) : (
             <div className="game-arena">

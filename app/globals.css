@@ -1266,6 +1266,26 @@ a {
   background: rgba(255, 0, 110, 0.3);
   box-shadow: 0 0 18px rgba(255, 0, 110, 0.6);
 }
+.touch-btn-drop {
+  position: absolute;
+  right: 98px;
+  bottom: 32px;
+  width: 52px;
+  height: 52px;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--yellow);
+  background: rgba(245, 255, 0, 0.1);
+  border-color: var(--yellow);
+  border-radius: 50%;
+  pointer-events: auto;
+}
+.touch-btn-drop:active {
+  background: rgba(245, 255, 0, 0.3);
+  box-shadow: 0 0 16px rgba(245, 255, 0, 0.6);
+}
 
 /* game over modal */
 .modal-bd {
