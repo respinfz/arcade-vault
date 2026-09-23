@@ -12,6 +12,8 @@ import { ArkanoidGame } from "@/components/games/arkanoid/arkanoid-game";
 import { TouchControls as ArkanoidTouchControls } from "@/components/games/arkanoid/touch-controls";
 import { AsteroidsGame } from "@/components/games/asteroids/asteroids-game";
 import { TouchControls as AsteroidsTouchControls } from "@/components/games/asteroids/touch-controls";
+import { SnakeGame } from "@/components/games/snake/snake-game";
+import { TouchControls as SnakeTouchControls } from "@/components/games/snake/touch-controls";
 import { TetrisGame } from "@/components/games/tetris/tetris-game";
 import { TouchControls as TetrisTouchControls } from "@/components/games/tetris/touch-controls";
 
@@ -49,6 +51,11 @@ export const GAME_REGISTRY: Record<string, GameRegistryEntry> = {
     Component: AsteroidsGame as unknown as GameRegistryEntry["Component"],
     TouchControls:
       AsteroidsTouchControls as unknown as GameRegistryEntry["TouchControls"],
+  },
+  snake: {
+    Component: SnakeGame as unknown as GameRegistryEntry["Component"],
+    TouchControls:
+      SnakeTouchControls as unknown as GameRegistryEntry["TouchControls"],
   },
   tetris: {
     Component: TetrisGame as unknown as GameRegistryEntry["Component"],
