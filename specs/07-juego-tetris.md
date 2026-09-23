@@ -1,6 +1,6 @@
 # SPEC 07 — Juego: Tetris
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 05, SPEC 06
 > **Date:** 2026-09-22
 > **Objective:** Agregar Tetris jugable al catálogo (reemplazando la tarjeta placeholder "CAÍDA"), con su motor real (piezas estándar, pieza tuerca, power-ups bomba/rayo y combo multiplicador), HUD sincronizado, controles táctiles y leaderboard en av_scores.

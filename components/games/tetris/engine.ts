@@ -403,11 +403,11 @@ export class TetrisEngine {
 
   private handleHold(
     code: string,
-    dt: number,
+    dtMs: number,
     key: "left" | "right" | "down",
     action: () => void,
-    repeat: number,
-    initialDelay: number,
+    repeatMs: number,
+    initialDelayMs: number,
   ) {
     if (this.pressed(code)) {
       action();
@@ -415,17 +415,17 @@ export class TetrisEngine {
       return;
     }
     if (this.input.keys[code]) {
-      this.moveTimers[key] += dt;
-      if (this.moveTimers[key] >= initialDelay) {
+      this.moveTimers[key] += dtMs;
+      if (this.moveTimers[key] >= initialDelayMs) {
         action();
-        this.moveTimers[key] -= repeat;
+        this.moveTimers[key] -= repeatMs;
       }
     } else {
       this.moveTimers[key] = 0;
     }
   }
 
-  private handleInput(dt: number) {
+  private handleInput(dtMs: number) {
     const rotateUp = this.pressed("ArrowUp");
     const rotateX = this.pressed("KeyX");
     if (rotateUp || rotateX) this.tryRotate();
@@ -437,7 +437,7 @@ export class TetrisEngine {
 
     this.handleHold(
       "ArrowLeft",
-      dt,
+      dtMs,
       "left",
       () => this.tryMove(-1),
       MOVE_DAS_REPEAT,
@@ -445,7 +445,7 @@ export class TetrisEngine {
     );
     this.handleHold(
       "ArrowRight",
-      dt,
+      dtMs,
       "right",
       () => this.tryMove(1),
       MOVE_DAS_REPEAT,
@@ -453,7 +453,7 @@ export class TetrisEngine {
     );
     this.handleHold(
       "ArrowDown",
-      dt,
+      dtMs,
       "down",
       () => this.softDrop(),
       SOFT_DROP_REPEAT,
@@ -466,7 +466,7 @@ export class TetrisEngine {
     const dtMs = dt * 1000;
     this.now += dtMs;
 
-    this.handleInput(dtMs / 1000);
+    this.handleInput(dtMs);
     // handleInput() puede terminar la partida (hardDrop/softDrop -> lockPiece -> spawn);
     // se re-lee this.state con un cast porque TS no invalida el narrowing de un campo
     // de instancia tras una llamada a método propio.
