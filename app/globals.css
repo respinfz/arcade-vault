@@ -684,7 +684,7 @@ a {
   inset: 0;
 }
 
-.cover-bricks {
+.cover-arkanoid {
   background:
     repeating-linear-gradient(
         90deg,
@@ -696,7 +696,7 @@ a {
       0 0/100% 32px,
     #15151f;
 }
-.cover-bricks::after {
+.cover-arkanoid::after {
   content: "";
   position: absolute;
   inset: 0;
