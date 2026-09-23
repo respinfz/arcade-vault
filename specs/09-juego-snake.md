@@ -1,6 +1,6 @@
 # SPEC 09 — Juego: Snake
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 05, SPEC 06
 > **Date:** 2026-09-22
 > **Objective:** Agregar Snake jugable al catálogo (reemplazando la tarjeta placeholder "SERPENTINA" por la tarjeta nueva `snake`), con su motor real diseñado desde cero, sprites de fruta reales, HUD sincronizado, controles táctiles de cruceta y leaderboard en `av_scores`.
