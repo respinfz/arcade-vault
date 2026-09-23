@@ -39,6 +39,8 @@ Every feature goes through a spec in `specs/NN-slug.md` (next number: `10`). Pro
 - **`/spec-impl <NN-spec-name>`** — implements a spec whose status is `Approved`. With `specs/.spec-config.yml` → `AutoCreateBranch: true` it creates/switches to branch `spec-NN-slug` automatically. After implementing, set the spec's status to `Implemented`.
 - **`/frontend-design`** — **always use it to design user interfaces** (new screens, cover art, touch-control layouts).
 
+Project subagent **`game-planner`** (`.claude/agents/game-planner.md`) plans and decides which game fits the platform next; it keeps its memory of past suggestions in `references/game-suggestions-to-do.md` (read before proposing, updated after). Its output feeds `/spec-juego`.
+
 Branches are merged into `main` via PRs, one per spec.
 
 ## Architecture
