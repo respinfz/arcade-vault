@@ -32,7 +32,7 @@ Next.js `16.3.5` (React 19.2) is newer than this model's training data and has b
 
 ## Spec-driven workflow
 
-Every feature goes through a spec in `specs/NN-slug.md` (next number: `10`). Project skills live in `.claude/skills/` (mirrored in `.agents/skills/`, tracked in `skills-lock.json`); all are user-invoked only (`disable-model-invocation`):
+Every feature goes through a spec in `specs/NN-slug.md` (next number: `11`). Project skills live in `.claude/skills/` (mirrored in `.agents/skills/`, tracked in `skills-lock.json`); all are user-invoked only (`disable-model-invocation`):
 
 - **`/spec <feature>`** — guided spec designer (from `Klerith/fernando-skills`). Template: `.claude/skills/spec/template.md`.
 - **`/spec-juego <game or references/started-games/ folder>`** — project-specific skill to spec a new playable game with leaderboard. Its `platform-contract.md` is the technical contract every game must follow (engine shape, React component, touch controls, registry entry, catalog migration, cover art). Read it before touching anything under `components/games/`.
@@ -40,6 +40,8 @@ Every feature goes through a spec in `specs/NN-slug.md` (next number: `10`). Pro
 - **`/frontend-design`** — **always use it to design user interfaces** (new screens, cover art, touch-control layouts).
 
 Project subagent **`game-planner`** (`.claude/agents/game-planner.md`) plans and decides which game fits the platform next; it keeps its memory of past suggestions in `references/game-suggestions-to-do.md` (read before proposing, updated after). Its output feeds `/spec-juego`.
+
+Project subagent **`game-jam`** (`.claude/agents/game-jam.md`) receives a specific game to implement (required — it never picks one on its own; use `game-planner` first if undecided) plus an optional theme, and autonomously writes 2–3 complete alternative specs (variants, all `Draft`) plus a comparison `README.md` in `specs/game-jam/<game-id>/`. The chosen variant is moved to `specs/NN-juego-<slug>.md` before `/spec-impl`.
 
 Branches are merged into `main` via PRs, one per spec.
 
