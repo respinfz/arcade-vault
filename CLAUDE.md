@@ -43,6 +43,8 @@ Project subagent **`game-planner`** (`.claude/agents/game-planner.md`) plans and
 
 Project subagent **`game-jam`** (`.claude/agents/game-jam.md`) receives a specific game to implement (required — it never picks one on its own; use `game-planner` first if undecided) plus an optional theme, and autonomously writes 2–3 complete alternative specs (variants, all `Draft`) plus a comparison `README.md` in `specs/game-jam/<game-id>/`. The chosen variant is moved to `specs/NN-juego-<slug>.md` before `/spec-impl`.
 
+Project subagent **`skin-designer`** (`.claude/agents/skin-designer.md`) receives the id of an already-implemented game (required) and implements directly a visual skin system modeled on `references/started-games/03-tetris/` (≥3 skins, all readable on the dark theme; `retro` default = current look). Skins live in `components/games/<slug>/skins.ts`, the engine exposes `setSkin()`, the registry entry lists `skins`, and a shared selector in `JugarClient` persists the choice only in `localStorage["av_skin:<id>"]` (never Supabase). It records every game with skins in `references/game-with-themes.md`.
+
 Branches are merged into `main` via PRs, one per spec.
 
 ## Architecture
