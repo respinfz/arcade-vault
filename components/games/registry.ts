@@ -14,6 +14,9 @@ import { TouchControls as ArkanoidTouchControls } from "@/components/games/arkan
 import { AsteroidsGame } from "@/components/games/asteroids/asteroids-game";
 import { SKIN_OPTIONS as ASTEROIDS_SKINS } from "@/components/games/asteroids/skins";
 import { TouchControls as AsteroidsTouchControls } from "@/components/games/asteroids/touch-controls";
+import { FroggerGame } from "@/components/games/frogger/frogger-game";
+import { SKIN_OPTIONS as FROGGER_SKINS } from "@/components/games/frogger/skins";
+import { TouchControls as FroggerTouchControls } from "@/components/games/frogger/touch-controls";
 import { SnakeGame } from "@/components/games/snake/snake-game";
 import { SKIN_OPTIONS as SNAKE_SKINS } from "@/components/games/snake/skins";
 import { TouchControls as SnakeTouchControls } from "@/components/games/snake/touch-controls";
@@ -60,6 +63,12 @@ export const GAME_REGISTRY: Record<string, GameRegistryEntry> = {
     TouchControls:
       AsteroidsTouchControls as unknown as GameRegistryEntry["TouchControls"],
     skins: ASTEROIDS_SKINS,
+  },
+  frogger: {
+    Component: FroggerGame as unknown as GameRegistryEntry["Component"],
+    TouchControls:
+      FroggerTouchControls as unknown as GameRegistryEntry["TouchControls"],
+    skins: FROGGER_SKINS,
   },
   snake: {
     Component: SnakeGame as unknown as GameRegistryEntry["Component"],
