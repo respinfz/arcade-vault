@@ -124,14 +124,25 @@ export interface TouchControlsProps {
 export function TouchControls({ gameRef }: TouchControlsProps) {}
 ```
 
-- Detección de dispositivo táctil vía `useSyncExternalStore` sobre
-  `matchMedia("(pointer: coarse)")`, con snapshot de servidor `false` (evita
-  mismatch de hidratación). Si no es táctil, `return null`.
-- Clases CSS ya existentes en `app/globals.css` (~líneas 1206–1268), a
-  reutilizar tal cual: `.touch-controls` (shell, `z-index: 6` sobre el
-  overlay de pausa), `.touch-controls-move` (grid de movimiento, esquina
-  inferior izquierda), `.touch-btn` (44×44 mínimo), `.touch-btn-fire`
-  (botón de acción circular, esquina inferior derecha).
+- **`TouchControls` no detecta el tipo de puntero y siempre renderiza** sus
+  botones dentro de `<div className="touch-controls">` (sin
+  `useSyncExternalStore`, sin `matchMedia`, sin `return null`). La detección
+  y el montaje los hace `JugarClient` (SPEC 11): con el hook compartido
+  `useCoarsePointer()` (`lib/hooks/use-coarse-pointer.ts`, único lugar que
+  consulta `matchMedia("(pointer: coarse)")`) agrega `av-player--touch` al
+  reproductor y renderiza `<entry.TouchControls gameRef={gameRef} />` dentro
+  de `.touch-console`, **debajo de `.crt`**, nunca sobre el canvas.
+- `JugarClient` marca la consola `.is-inactive` (atenuada, sin
+  `pointer-events`) en pausa y en "FIN DEL JUEGO", y previene scroll, zoom,
+  selección y menú contextual sobre `.crt-screen` y `.touch-console`. El
+  juego no tiene que hacer nada de esto.
+- Clases CSS existentes en `app/globals.css` (bloque "consola táctil"), a
+  reutilizar tal cual: `.touch-controls` (grid de la consola: movimiento a la
+  izquierda, acción a la derecha), `.touch-controls-move` (grid de
+  movimiento), `.touch-btn` (**56×56 mínimo**), `.touch-btn-fire` (acción
+  principal circular, **≥ 64×64**; hoy 72×72), `.touch-btn-drop` (acción
+  secundaria, en diagonal sobre la principal) y `.touch-controls-dpad`
+  (cruceta de 4 direcciones centrada, sin botón de acción).
 - **El orden del markup importa**: los tres botones de `.touch-controls-move`
   se posicionan por `:nth-child(1|2|3)` en el CSS existente. Si el juego
   nuevo necesita un layout distinto (p. ej. Tetris: rotar + caída rápida en

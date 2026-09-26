@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/components/providers/user-provider";
 import { GAME_REGISTRY, type GameHandle } from "@/components/games/registry";
+import { useCoarsePointer } from "@/lib/hooks/use-coarse-pointer";
 import type { Game } from "@/lib/types";
 
 // Skin con la que arranca todo juego con skins (y fallback ante un valor inválido)
@@ -15,6 +16,8 @@ export default function JugarClient({ game }: { game: Game }) {
   const gameRef = useRef<GameHandle>(null);
 
   const entry = GAME_REGISTRY[game.id];
+  // Dispositivo táctil: JugarClient decide si montar la consola de controles
+  const isTouch = useCoarsePointer();
 
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -69,6 +72,17 @@ export default function JugarClient({ game }: { game: Game }) {
     return () => clearInterval(t);
   }, [over, paused, entry]);
 
+  // Pausa automática al perder foco (cambio de app o de pestaña). No reanuda sola:
+  // el jugador pulsa REANUDAR. Si la partida terminó, el modal no cambia.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden && !over) setPaused(true);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [over]);
+
   const endGame = () => {
     if (entry) {
       gameRef.current?.forceGameOver();
@@ -89,7 +103,7 @@ export default function JugarClient({ game }: { game: Game }) {
   };
 
   return (
-    <div className="av-player fade-in">
+    <div className={"av-player fade-in" + (isTouch ? " av-player--touch" : "")}>
       <div className="player-hud">
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           <div className="hud-stat">
@@ -149,23 +163,20 @@ export default function JugarClient({ game }: { game: Game }) {
       </div>
 
       <div className="crt" data-skin={entry?.skins?.length ? skin : undefined}>
-        <div className="crt-screen">
+        <div className="crt-screen" onContextMenu={(e) => e.preventDefault()}>
           {entry ? (
-            <>
-              <entry.Component
-                ref={gameRef}
-                paused={paused}
-                skin={skin}
-                onScoreChange={setScore}
-                onLivesChange={setLives}
-                onLevelChange={setLevel}
-                onGameOver={(finalScore) => {
-                  setScore(finalScore);
-                  setOver(true);
-                }}
-              />
-              {entry.TouchControls && <entry.TouchControls gameRef={gameRef} />}
-            </>
+            <entry.Component
+              ref={gameRef}
+              paused={paused}
+              skin={skin}
+              onScoreChange={setScore}
+              onLivesChange={setLives}
+              onLevelChange={setLevel}
+              onGameOver={(finalScore) => {
+                setScore(finalScore);
+                setOver(true);
+              }}
+            />
           ) : (
             <div className="game-arena">
               <div className="grid-floor"></div>
@@ -205,6 +216,17 @@ export default function JugarClient({ game }: { game: Game }) {
           <span>CARGA · 1MB</span>
         </div>
       </div>
+
+      {/* Consola táctil bajo la pantalla (nunca sobre el canvas); inactiva en pausa/fin
+          para que un toque no quede encolado en el motor */}
+      {isTouch && entry?.TouchControls && (
+        <div
+          className={"touch-console" + (paused || over ? " is-inactive" : "")}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <entry.TouchControls gameRef={gameRef} />
+        </div>
+      )}
 
       {over && (
         <div className="modal-bd">

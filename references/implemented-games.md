@@ -1,6 +1,6 @@
 # Juegos implementados
 
-Juegos de Arcade Vault con motor real (canvas + `engine.ts` propio), registrados en `components/games/registry.ts`. Todos guardan su puntaje en el leaderboard (`av_scores`), integran el HUD, la pausa y el modal "FIN DEL JUEGO" del reproductor, y muestran controles táctiles en dispositivos `(pointer: coarse)`.
+Juegos de Arcade Vault con motor real (canvas + `engine.ts` propio), registrados en `components/games/registry.ts`. Todos guardan su puntaje en el leaderboard (`av_scores`), integran el HUD, la pausa y el modal "FIN DEL JUEGO" del reproductor, y muestran controles táctiles en dispositivos `(pointer: coarse)`: `JugarClient` detecta el puntero (`useCoarsePointer()`) y monta el `TouchControls` de cada juego en una consola (`.touch-console`) debajo de la pantalla CRT, nunca sobre el canvas (SPEC 11).
 
 Se omiten los placeholders del catálogo que solo corren la simulación falsa de puntaje (`gloton`, `invasores`, `ranaria`, `duelo-pixel`).
 

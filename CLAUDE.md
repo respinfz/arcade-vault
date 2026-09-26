@@ -70,7 +70,7 @@ Branches are merged into `main` via PRs, one per spec.
 - Each game lives in `components/games/<slug>/`:
   - `engine.ts` — framework-agnostic class (`constructor(ctx, width, height, input)`, `restart()`, `forceGameOver()`, `update(dt)`, `draw()`), exposing `score`/`lives`/`level`/`state` as public fields polled each frame. No `window`/`document` access.
   - `<slug>-game.tsx` — `forwardRef` component with a `requestAnimationFrame` loop, keyboard listeners, and callbacks `onScoreChange`/`onLivesChange`/`onLevelChange`/`onGameOver`. The platform's "FIN DEL JUEGO" modal replaces the original game-over overlay.
-  - `touch-controls.tsx` — rendered only on `(pointer: coarse)` devices.
+  - `touch-controls.tsx` — always renders its buttons (no pointer detection of its own); `JugarClient` detects `(pointer: coarse)` via `useCoarsePointer()` (`lib/hooks/use-coarse-pointer.ts`) and mounts it in `.touch-console`, below the CRT screen (never over the canvas).
 - Adding a game = new folder + registry entry + migration inserting the `av_games` row (deleting the placeholder it replaces) + `.cover-<slug>` CSS. Leaderboard, Hall of Fame and catalog pages need no changes (they are data-driven).
 - Source material for ports: `references/started-games/` (original vanilla-JS games) and `references/source-assets/` (sprites). Sprite assets used at runtime go in `public/games/<slug>/` (e.g. `public/games/snake/fruits.png`).
 
