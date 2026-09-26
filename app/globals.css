@@ -1165,6 +1165,17 @@ a {
   pointer-events: none;
   mix-blend-mode: multiply;
 }
+/* Rendimiento del reproductor (SPEC 13), solo en /juegos/[id]/jugar:
+   - el grid de fondo queda quieto: animar background-position repinta una capa
+     del tamaño del viewport en cada frame, compitiendo con el canvas del juego;
+   - las scanlines usan mezcla normal: con negro semitransparente, multiply da
+     exactamente el mismo resultado ((1−α)·C) sin forzar la mezcla con el canvas. */
+body:has(.av-player) .av-bg::before {
+  animation: none;
+}
+body:has(.av-player) .crt-screen::after {
+  mix-blend-mode: normal;
+}
 .crt-screen::before {
   content: "";
   position: absolute;

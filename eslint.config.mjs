@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Material de referencia (plantillas y juegos vanilla originales) y salida del MCP
+    // de Playwright: no forman parte de la app.
+    "references/**",
+    ".playwright-mcp/**",
   ]),
 ]);
 

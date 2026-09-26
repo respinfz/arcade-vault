@@ -182,12 +182,20 @@ const DIR_DELTA: Record<Direction, { dc: number; dr: number }> = {
   right: { dc: 1, dr: 0 },
 };
 
+// Memo de colores derivados: evita parsear hex y crear strings en cada frame.
+const shadeCache = new Map<string, string>(); // clave `${hex}|${amt}`
+
 /* Aclara (amt > 0) u oscurece (amt < 0) un color '#rrggbb' (como shade() del Tetris). */
 function shade(hex: string, amt: number): string {
+  const key = `${hex}|${amt}`;
+  const cached = shadeCache.get(key);
+  if (cached) return cached;
   const n = parseInt(hex.slice(1), 16);
   const clamp = (v: number) =>
     Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
-  return `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  const out = `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  shadeCache.set(key, out);
+  return out;
 }
 
 // Caja que envuelve una forma: la usan el brillo (rounded) y la textura (pixel).
@@ -199,6 +207,35 @@ interface Box {
 }
 
 const PIXEL_CELL = 5; // px de cada "píxel" de la textura del estilo pixel
+
+// Contexto de dibujo: el del canvas visible o el de una capa offscreen (caché).
+type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+// Sprite pre-renderizado de una entidad para la skin activa.
+interface Sprite {
+  canvas: OffscreenCanvas;
+  ox: number; // desplazamiento del origen dentro del sprite (margen del halo)
+  oy: number;
+}
+
+// Caja del cuerpo de la rana en sus coordenadas locales (centro en 0,0).
+const FROG_BOX: Box = { x: -12, y: -14, w: 24, h: 28 };
+
+// Margen del sprite alrededor de la entidad: cabe el halo de glow (shadowBlur 12).
+const SPRITE_PAD = 20;
+
+// Fase visual de un grupo de tortugas: a flote, parpadeo de aviso o sumergida.
+type TurtlePhase = "normal" | "warn" | "sub";
+
+function turtlePhase(e: Entity): TurtlePhase {
+  if (e.submerged) return "sub";
+  // Aviso: en el último segundo a flote el caparazón parpadea antes de sumergirse.
+  const warn =
+    e.phaseT !== undefined &&
+    e.phaseT > TURTLE_VISIBLE_MS - TURTLE_WARN_MS &&
+    Math.floor(e.phaseT / 150) % 2 === 0;
+  return warn ? "warn" : "normal";
+}
 
 const GOAL_POINTS = 50;
 const ROUND_POINTS = 200;
@@ -270,8 +307,21 @@ export class FroggerEngine {
   private timeLeftMs = BASE_TIME_MS;
   private bestRowThisTrip = ROW_START; // fila más alta (índice menor) alcanzada en el viaje
 
+  // Fondo estático de la skin activa, pintado una vez y copiado cada frame con un
+  // solo drawImage. null = sin construir (o sin OffscreenCanvas: se dibuja directo).
+  private bgLayer: OffscreenCanvas | null = null;
+  // Sprites de entidades de la skin activa (clave: forma + fase, ver spriteKey()).
+  private sprites = new Map<string, Sprite>();
+  private entityKeys = new WeakMap<Entity, Record<TurtlePhase, string>>();
+  private frogGloss: CanvasGradient | null = null; // brillo rounded de la rana
+  // Textos del HUD, regenerados solo cuando cambia su valor.
+  private hudScore = -1;
+  private hudScoreText = "";
+  private hudLevel = -1;
+  private hudLevelText = "";
+
   constructor(
-    private ctx: CanvasRenderingContext2D,
+    private ctx: Ctx2D,
     private width: number,
     private height: number,
     private input: EngineInput,
@@ -303,6 +353,9 @@ export class FroggerEngine {
   // Cambia solo la apariencia: no reinicia la partida ni toca puntaje/estado.
   setSkin(id: string): void {
     this.skin = resolveSkin(id);
+    // Las cachés de dibujo son por skin
+    this.bgLayer = null;
+    this.sprites.clear();
   }
 
   private get activeSkin(): FroggerSkin {
@@ -519,9 +572,23 @@ export class FroggerEngine {
     }
   }
 
+  // Brillo superior del estilo rounded para una caja.
+  private glossGradient(box: Box): CanvasGradient {
+    const g = this.ctx.createLinearGradient(0, box.y, 0, box.y + box.h);
+    g.addColorStop(0, "rgba(255,255,255,0.45)");
+    g.addColorStop(0.45, "rgba(255,255,255,0)");
+    return g;
+  }
+
   // Rellena la forma que traza `path` según el `style` de la skin activa (equivale a las
   // ramas flat/glow/rounded/pixel de drawBlock() del Tetris). `color` en '#rrggbb'.
-  private paint(path: () => void, color: string, box: Box): void {
+  // `gloss`: brillo rounded ya creado para `box` (lo reutiliza la rana en cada frame).
+  private paint(
+    path: () => void,
+    color: string,
+    box: Box,
+    gloss?: CanvasGradient,
+  ): void {
     const ctx = this.ctx;
     const skin = this.activeSkin;
     switch (skin.style) {
@@ -550,10 +617,7 @@ export class FroggerEngine {
         ctx.fill();
         ctx.save();
         ctx.clip();
-        const g = ctx.createLinearGradient(0, box.y, 0, box.y + box.h);
-        g.addColorStop(0, "rgba(255,255,255,0.45)");
-        g.addColorStop(0.45, "rgba(255,255,255,0)");
-        ctx.fillStyle = g;
+        ctx.fillStyle = gloss ?? this.glossGradient(box);
         ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.restore();
         ctx.strokeStyle = shade(color, -0.22);
@@ -604,7 +668,56 @@ export class FroggerEngine {
     );
   }
 
+  // Ejecuta `draw` sobre otro contexto (una capa offscreen): todas las rutinas de
+  // dibujo usan this.ctx, así que se redirige mientras dura.
+  private drawInto(target: Ctx2D, draw: () => void): void {
+    const main = this.ctx;
+    this.ctx = target;
+    try {
+      draw();
+    } finally {
+      this.ctx = main;
+    }
+  }
+
+  // Capa del fondo estático para la skin activa; se construye la primera vez.
+  // null sin OffscreenCanvas (el motor no toca window/document): se dibuja directo.
+  private getBgLayer(): OffscreenCanvas | null {
+    if (this.bgLayer) return this.bgLayer;
+    if (typeof OffscreenCanvas === "undefined") return null;
+    const layer = new OffscreenCanvas(this.width, this.height);
+    const layerCtx = layer.getContext("2d");
+    if (!layerCtx) return null;
+    this.drawInto(layerCtx, () => this.drawStaticBackground());
+    this.bgLayer = layer;
+    return layer;
+  }
+
   private drawBackground(): void {
+    const layer = this.getBgLayer();
+    if (layer) this.ctx.drawImage(layer, 0, 0);
+    else this.drawStaticBackground();
+    this.drawGoalFrogs();
+  }
+
+  // Ranas de las bocas ocupadas: cambian durante la partida, van sobre la capa.
+  private drawGoalFrogs(): void {
+    const h = CELL - GOAL_TOP;
+    GOAL_COLS.forEach((gc, i) => {
+      if (!this.goals[i]) return;
+      this.drawFrogShape(
+        (gc + GOAL_WIDTH / 2) * CELL,
+        GOAL_TOP + h / 2,
+        0.6,
+        "up",
+        false,
+      );
+    });
+  }
+
+  // Todo lo que no cambia con una skin fija: río, zonas seguras, carretera, rejilla,
+  // seto y bocas (vacías).
+  private drawStaticBackground(): void {
     const ctx = this.ctx;
     const skin = this.activeSkin;
     const c = skin.colors;
@@ -666,7 +779,7 @@ export class FroggerEngine {
       ctx.fillRect(0, CELL - 2, this.width, 2);
       ctx.restore();
     }
-    GOAL_COLS.forEach((gc, i) => {
+    GOAL_COLS.forEach((gc) => {
       const x = gc * CELL + 3;
       const w = GOAL_WIDTH * CELL - 6;
       const h = CELL - GOAL_TOP;
@@ -690,15 +803,6 @@ export class FroggerEngine {
         ctx.strokeRect(x + 1, GOAL_TOP + 1, w - 2, h - 2);
       }
       ctx.restore();
-      if (this.goals[i]) {
-        this.drawFrogShape(
-          (gc + GOAL_WIDTH / 2) * CELL,
-          GOAL_TOP + h / 2,
-          0.6,
-          "up",
-          false,
-        );
-      }
     });
   }
 
@@ -719,10 +823,16 @@ export class FroggerEngine {
     }
   }
 
-  private drawCar(e: Entity, y: number, dir: 1 | -1, color: string): void {
+  // Las formas de las entidades reciben la esquina (x, y) y el ancho en px: así se
+  // pintan igual en el canvas (respaldo) o en su sprite (con el margen del halo).
+  private drawCar(
+    x: number,
+    w: number,
+    y: number,
+    dir: 1 | -1,
+    color: string,
+  ): void {
     const ctx = this.ctx;
-    const x = e.col * CELL;
-    const w = e.width * CELL;
     this.drawWheels([x + 8, x + w - 8], y, 9, 5);
     // carrocería
     this.paintRect(x + 3, y + 8, w - 6, CELL - 16, 6, color);
@@ -732,11 +842,9 @@ export class FroggerEngine {
     ctx.fillRect(wsX, y + 12, 8, CELL - 24);
   }
 
-  private drawTruck(e: Entity, y: number, dir: 1 | -1): void {
+  private drawTruck(x: number, w: number, y: number, dir: 1 | -1): void {
     const ctx = this.ctx;
     const c = this.activeSkin.colors;
-    const x = e.col * CELL;
-    const w = e.width * CELL;
     const cabW = 26;
     const cabX = dir > 0 ? x + w - cabW - 2 : x + 2;
     const trailerX = dir > 0 ? x + 2 : x + cabW + 4;
@@ -751,11 +859,9 @@ export class FroggerEngine {
     ctx.fillRect(dir > 0 ? cabX + cabW - 9 : cabX + 3, y + 12, 6, CELL - 24);
   }
 
-  private drawLog(e: Entity, y: number): void {
+  private drawLog(x: number, w: number, y: number): void {
     const ctx = this.ctx;
     const c = this.activeSkin.colors;
-    const x = e.col * CELL;
-    const w = e.width * CELL;
     this.paintRect(x + 2, y + 6, w - 4, CELL - 12, 12, c.log);
     // vetas
     ctx.strokeStyle = c.logDark;
@@ -779,20 +885,19 @@ export class FroggerEngine {
     ctx.stroke();
   }
 
-  private drawTurtles(e: Entity, y: number): void {
+  private drawTurtles(
+    x: number,
+    count: number,
+    y: number,
+    phase: TurtlePhase,
+  ): void {
     const ctx = this.ctx;
     const skin = this.activeSkin;
     const c = skin.colors;
     const cy = y + CELL / 2;
-    // Aviso: en el último segundo a flote el caparazón parpadea antes de sumergirse.
-    const warn =
-      !e.submerged &&
-      e.phaseT !== undefined &&
-      e.phaseT > TURTLE_VISIBLE_MS - TURTLE_WARN_MS &&
-      Math.floor(e.phaseT / 150) % 2 === 0;
-    for (let i = 0; i < e.width; i++) {
-      const cx = (e.col + i) * CELL + CELL / 2;
-      if (e.submerged) {
+    for (let i = 0; i < count; i++) {
+      const cx = x + i * CELL + CELL / 2;
+      if (phase === "sub") {
         // Aro discontinuo: en skins de contorno (neon) un aro continuo se confunde con
         // una tortuga a flote.
         ctx.save();
@@ -825,7 +930,7 @@ export class FroggerEngine {
           ctx.beginPath();
           ctx.arc(cx, cy, 15, 0, Math.PI * 2);
         },
-        warn ? c.turtleWarn : c.turtle,
+        phase === "warn" ? c.turtleWarn : c.turtle,
         { x: cx - 15, y: cy - 15, w: 30, h: 30 },
       );
       // escamas
@@ -842,16 +947,76 @@ export class FroggerEngine {
     }
   }
 
+  // Dibuja la forma de una entidad con su esquina en (x, y).
+  private drawEntityShape(e: Entity, lane: Lane, x: number, y: number): void {
+    const w = e.width * CELL;
+    if (e.type === "car")
+      this.drawCar(
+        x,
+        w,
+        y,
+        lane.dir,
+        this.activeSkin.colors.carColors[lane.row % 3],
+      );
+    else if (e.type === "truck") this.drawTruck(x, w, y, lane.dir);
+    else if (e.type === "log") this.drawLog(x, w, y);
+    else this.drawTurtles(x, e.width, y, turtlePhase(e));
+  }
+
+  // Clave del sprite de una entidad: forma y fase visual, sin depender de la skin (la
+  // caché se vacía al cambiarla). Se calcula una vez por entidad para no crear strings
+  // en cada frame.
+  private spriteKey(e: Entity, lane: Lane): string {
+    let keys = this.entityKeys.get(e);
+    if (!keys) {
+      const base =
+        e.type === "car"
+          ? `car|${lane.dir}|${lane.row % 3}|${e.width}`
+          : e.type === "truck"
+            ? `truck|${lane.dir}|${e.width}`
+            : `${e.type}|${e.width}`;
+      keys = { normal: base, warn: `${base}|warn`, sub: `${base}|sub` };
+      this.entityKeys.set(e, keys);
+    }
+    return e.type === "turtle" ? keys[turtlePhase(e)] : keys.normal;
+  }
+
+  // Sprite de la entidad para la skin activa, construido bajo demanda. null sin
+  // OffscreenCanvas: la entidad se dibuja directo.
+  private getSprite(e: Entity, lane: Lane): Sprite | null {
+    if (typeof OffscreenCanvas === "undefined") return null;
+    const key = this.spriteKey(e, lane);
+    const cached = this.sprites.get(key);
+    if (cached) return cached;
+    const canvas = new OffscreenCanvas(
+      e.width * CELL + SPRITE_PAD * 2,
+      CELL + SPRITE_PAD * 2,
+    );
+    const spriteCtx = canvas.getContext("2d");
+    if (!spriteCtx) return null;
+    this.drawInto(spriteCtx, () =>
+      this.drawEntityShape(e, lane, SPRITE_PAD, SPRITE_PAD),
+    );
+    const sprite: Sprite = { canvas, ox: SPRITE_PAD, oy: SPRITE_PAD };
+    this.sprites.set(key, sprite);
+    return sprite;
+  }
+
   private drawLanes(): void {
-    const carColors = this.activeSkin.colors.carColors;
+    const ctx = this.ctx;
     for (const lane of this.lanes) {
       const y = this.rowY(lane.row);
       for (const e of lane.entities) {
-        if (e.type === "car")
-          this.drawCar(e, y, lane.dir, carColors[lane.row % 3]);
-        else if (e.type === "truck") this.drawTruck(e, y, lane.dir);
-        else if (e.type === "log") this.drawLog(e, y);
-        else this.drawTurtles(e, y);
+        const x = e.col * CELL;
+        const sprite = this.getSprite(e, lane);
+        // Posición entera: drawImage no interpola subpíxeles (col sigue fraccionaria).
+        if (sprite)
+          ctx.drawImage(
+            sprite.canvas,
+            Math.round(x) - sprite.ox,
+            y - sprite.oy,
+          );
+        else this.drawEntityShape(e, lane, x, y);
       }
     }
   }
@@ -903,13 +1068,17 @@ export class FroggerEngine {
     ctx.stroke();
     ctx.restore();
 
+    // El brillo de la rana es siempre el mismo (coordenadas locales): se crea una vez.
+    if (skin.style === "rounded")
+      this.frogGloss ??= this.glossGradient(FROG_BOX);
     this.paint(
       () => {
         ctx.beginPath();
         ctx.ellipse(0, 0, 12, 14, 0, 0, Math.PI * 2);
       },
       c.frog,
-      { x: -12, y: -14, w: 24, h: 28 },
+      FROG_BOX,
+      this.frogGloss ?? undefined,
     );
 
     for (const ex of [-6, 6]) {
@@ -962,9 +1131,18 @@ export class FroggerEngine {
     ctx.font = "bold 14px monospace";
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(`SCORE ${this.score}`, 8, HUD_HEIGHT / 2 + 1);
+    // Los textos solo se regeneran cuando cambia el valor (sin strings nuevos por frame).
+    if (this.score !== this.hudScore) {
+      this.hudScore = this.score;
+      this.hudScoreText = `SCORE ${this.score}`;
+    }
+    if (this.level !== this.hudLevel) {
+      this.hudLevel = this.level;
+      this.hudLevelText = `NIVEL ${this.level}`;
+    }
+    ctx.fillText(this.hudScoreText, 8, HUD_HEIGHT / 2 + 1);
     ctx.textAlign = "center";
-    ctx.fillText(`NIVEL ${this.level}`, this.width / 2, HUD_HEIGHT / 2 + 1);
+    ctx.fillText(this.hudLevelText, this.width / 2, HUD_HEIGHT / 2 + 1);
 
     // Vidas: un icono de rana por vida, alineados a la derecha (cuadrados en pixel)
     if (glow) ctx.shadowColor = c.frog;
