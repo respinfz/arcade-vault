@@ -26,6 +26,17 @@ Persistencia: `localStorage["av_skin:<id>"]` (nunca Supabase). Selector común e
   - `pixel`: fondo `#0a0c18` con estrellas de 2 px; rocas y nave rasterizadas en una rejilla alineada al mundo (celdas 5 px rocas, 3 px nave, 2 px iconos de vida) con textura determinista de luces/sombras y borde oscuro; balas y partículas cuadradas; HUD amarillo en negrita. Marco del CRT más recto.
 - **Archivos:** `components/games/asteroids/skins.ts`, `engine.ts` (`setSkin()`, `drawBody()` por `style`), `asteroids-game.tsx` (prop `skin`), `components/games/registry.ts` (`skins`), `components/jugar/jugar-client.tsx` (selector), `app/globals.css` (`.skin-select`, halos `.crt[data-skin]`).
 
+## frogger — Frogger
+
+- **Fecha:** 2026-09-26
+- **Skins:** `retro` (default, flat) · `neon` (glow) · `pastel` (rounded) · `pixel` (pixel)
+- **Por skin:**
+  - `retro`: asfalto `#07070c`, río `#0a1f4a`, aceras verde oscuro `#0f3a1a`, seto `#3fa34d` con bocas de borde dorado; coches rojo/amarillo/azul, camiones gris con cabina naranja, troncos marrones, tortugas verdes (parpadeo verde claro antes de sumergirse), rana `#39ff14`; HUD blanco sobre franja negra y barra de tiempo verde → amarilla → roja. Idéntico al look previo.
+  - `neon`: fondo `#05050a`, río azul noche con ondas cian, aceras violeta muy oscuro, líneas de carril magenta; todas las entidades con núcleo oscuro teñido y contorno con `shadowBlur` de su color (coches rosa/amarillo/azul, camión lila con cabina naranja, troncos naranja, tortugas verde agua que avisan en magenta, rana verde con patas brillantes); seto como tubo de neón verde y bocas amarillas con halo; HUD cian con glow. Halo cian en el marco del CRT (CSS compartido).
+  - `pastel`: asfalto violáceo oscuro `#171527`, río `#1b2346`, aceras menta oscuro (no el fondo claro de la referencia); formas más redondeadas con brillo superior y borde suave: coches rosa/crema/celeste, camión lavanda con cabina durazno, troncos caramelo, tortugas aqua (aviso rosa), rana verde claro; bocas redondeadas con borde crema; HUD lila claro.
+  - `pixel`: fondo `#0a0c18` con rejilla tenue por columnas, río azul NES, aceras violeta (guiño al arcade de 1981), líneas de carril amarillas; formas rectas con textura determinista de celdas de 5 px (viaja con la entidad) y borde oscuro; ruedas, patas, ojos, anillos de tronco e iconos de vida cuadrados; tortugas rojas como en el original; seto texturizado; HUD amarillo.
+- **Archivos:** `components/games/frogger/skins.ts`, `engine.ts` (`setSkin()`; `paint()`/`paintRect()` ramifican el relleno por `style`, `pixelTexture()`, `radius()` y `drawWheels()`; se eliminó el objeto `COLORS`), `frogger-game.tsx` (prop `skin`; ya ignoraba teclas dirigidas al `<select>`), `components/games/registry.ts` (`skins`). Selector de `JugarClient` y halos `.crt[data-skin]` de `app/globals.css` reutilizados sin cambios.
+
 ## snake — Snake
 
 - **Fecha:** 2026-09-25

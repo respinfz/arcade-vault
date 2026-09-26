@@ -10,6 +10,7 @@ Se omiten los placeholders del catálogo que solo corren la simulación falsa de
 | TETRIS     | `tetris`     | PUZZLE    | [07](../specs/07-juego-tetris.md)     | `/juegos/tetris`     |
 | ARKANOID   | `arkanoid`   | ARCADE    | [08](../specs/08-juego-arkanoid.md)   | `/juegos/arkanoid`   |
 | SNAKE      | `snake`      | ARCADE    | [09](../specs/09-juego-snake.md)      | `/juegos/snake`      |
+| FROGGER    | `frogger`    | ARCADE    | [12](../specs/12-juego-frogger.md)    | `/juegos/frogger`    |
 
 ---
 
@@ -60,3 +61,15 @@ Guía a la serpiente por una grilla neón cazando frutas (21 sprites en `public/
 - **Táctil:** cruceta de 4 botones ▲/▼/◀/▶ (tap)
 - **Fin de partida:** choque contra un borde o contra el propio cuerpo.
 - **Skins:** `retro` (default) · `neon` · `pastel` · `pixel` — ver [game-with-themes.md](game-with-themes.md#snake--snake).
+
+## FROGGER
+
+_Cruza la carretera y el río sin convertirte en papilla._
+
+Guía a tu rana por cinco carriles de tráfico y seis de río (troncos y tortugas; en cada fila de tortugas un grupo se sumerge tras 1 s de parpadeo) hasta llenar las cinco bocas del otro lado. Cada ronda completada sube el nivel: el tráfico acelera un 15 % y el temporizador de viaje se acorta.
+
+- **Código:** `components/games/frogger/`
+- **Teclado:** flechas (un salto de una celda por pulsación)
+- **Táctil:** cruceta de 4 botones ▲/▼/◀/▶ (tap, un salto por toque)
+- **Fin de partida:** se pierden las tres vidas (vehículo, agua, tortuga sumergida, salir por un borde o agotar el tiempo).
+- **Skins:** `retro` (default) · `neon` · `pastel` · `pixel` — ver [game-with-themes.md](game-with-themes.md#frogger--frogger).
