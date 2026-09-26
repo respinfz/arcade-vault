@@ -45,6 +45,8 @@ Project subagent **`game-jam`** (`.claude/agents/game-jam.md`) receives a specif
 
 Project subagent **`skin-designer`** (`.claude/agents/skin-designer.md`) receives the id of an already-implemented game (required) and implements directly a visual skin system modeled on `references/started-games/03-tetris/` (≥3 skins, all readable on the dark theme; `retro` default = current look). Skins live in `components/games/<slug>/skins.ts`, the engine exposes `setSkin()`, the registry entry lists `skins`, and a shared selector in `JugarClient` persists the choice only in `localStorage["av_skin:<id>"]` (never Supabase). It records every game with skins in `references/game-with-themes.md`.
 
+Project subagent **`mobile-porter`** (`.claude/agents/mobile-porter.md`) receives the id of an already-implemented game without mobile support (required) and ports its player to the SPEC 11 touch contract (`touch-controls.tsx` rendered in `.touch-console` below the CRT, registry `TouchControls` entry, ≥56px / ≥64px buttons, no overlays on the canvas), without touching desktop. It verifies by Playwright touch emulation at 360×640 and 390×844 portrait plus desktop, runs lint + build, and records ported games in `references/mobile-ported-games.md`.
+
 Branches are merged into `main` via PRs, one per spec.
 
 ## Architecture
