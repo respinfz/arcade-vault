@@ -1040,6 +1040,85 @@ a {
 .hud-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ===== selector de skin (juegos con skins en el registry) ===== */
+.skin-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 0;
+}
+.skin-picker-l {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-dim);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.skin-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 40px;
+  min-width: 132px;
+  padding: 0 34px 0 12px;
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background-color: var(--bg);
+  /* flecha en píxeles, en el mismo magenta de los acentos del HUD */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--magenta) 50%),
+    linear-gradient(135deg, var(--magenta) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--cyan);
+  cursor: pointer;
+  text-shadow: 0 0 6px rgba(0, 245, 255, 0.45);
+  transition:
+    border-color 160ms,
+    box-shadow 160ms;
+}
+.skin-select:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 245, 255, 0.35);
+}
+.skin-select:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+.skin-select option {
+  background: var(--bg-2);
+  color: var(--ink);
+  text-shadow: none;
+}
+
+/* Marco del CRT según la skin activa (como body[data-skin="neon"] #board del Tetris) */
+.crt[data-skin="neon"] .crt-screen {
+  box-shadow:
+    inset 0 0 60px rgba(0, 0, 0, 0.9),
+    inset 0 0 26px rgba(255, 43, 214, 0.22),
+    0 0 22px rgba(0, 245, 255, 0.45);
+}
+.crt[data-skin="pastel"] .crt-screen {
+  box-shadow:
+    inset 0 0 60px rgba(0, 0, 0, 0.85),
+    inset 0 0 22px rgba(205, 180, 219, 0.22),
+    0 0 18px rgba(205, 180, 219, 0.25);
+}
+.crt[data-skin="pixel"] .crt-screen {
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 60px rgba(0, 0, 0, 0.85),
+    0 0 0 3px #1e2340;
 }
 
 .crt {

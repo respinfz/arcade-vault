@@ -3,6 +3,16 @@
 // constructor. El campo de juego original (480×640) se rediseña centrado dentro de un
 // canvas lógico 800×600 (mismo tamaño que asteroids/tetris) — ver specs/08-juego-arkanoid.md.
 // Paleta/pala/bola se dibujan con figuras vectoriales (fillRect/arc), sin sprites ni sonido.
+// El aspecto visual sale de la skin activa (./skins); la lógica de juego no depende de ella.
+
+import {
+  DEFAULT_SKIN,
+  SKINS,
+  resolveSkin,
+  type ArkanoidSkin,
+  type BrickColor,
+  type SkinId,
+} from "./skins";
 
 export interface EngineInput {
   keys: Record<string, boolean>;
@@ -23,8 +33,9 @@ const BLOCK_H = 16;
 const BLOCKS_X = FIELD_X;
 const BLOCKS_Y = 30; // debajo de la franja de HUD, con un margen de 10px
 
-// Filas de arriba hacia abajo con su puntaje asociado (idéntico al original).
-const ROW_COLORS = [
+// Filas de arriba hacia abajo con su puntaje asociado (idéntico al original). Son colores
+// lógicos: la skin activa decide el color real con que se pinta cada fila.
+const ROW_COLORS: BrickColor[] = [
   "green",
   "hotpink",
   "magenta",
@@ -33,7 +44,7 @@ const ROW_COLORS = [
   "red",
   "gray",
 ];
-const COLOR_POINTS: Record<string, number> = {
+const COLOR_POINTS: Record<BrickColor, number> = {
   gray: 1,
   red: 2,
   yellow: 3,
@@ -152,7 +163,7 @@ interface Block {
   y: number;
   w: number;
   h: number;
-  color: string;
+  color: BrickColor;
   points: number;
   alive: boolean;
 }
@@ -160,8 +171,111 @@ interface Block {
 interface BreakFlash {
   x: number;
   y: number;
-  color: string;
+  color: BrickColor;
   remainingMs: number;
+}
+
+/* ---- Helpers de dibujo por skin (equivalentes a drawBlock() del Tetris) ---- */
+
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Aclara (amt > 0) u oscurece (amt < 0) un color '#rrggbb'. Solo se usa con las skins
+// que definen sus colores en hex (pixel); ante otro formato devuelve el color tal cual.
+function shade(color: string, amt: number): string {
+  if (!/^#[0-9a-f]{6}$/i.test(color)) return color;
+  const n = parseInt(color.slice(1), 16);
+  const clamp = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
+  return `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+}
+
+// Textura de píxeles determinista (no parpadea entre frames) sobre un rectángulo, en
+// celdas de `cell` px, con luces/sombras y borde oscuro (drawPixelTexture del Tetris).
+function drawPixelTexture(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+  cell = 4,
+) {
+  const light = shade(color, 0.18);
+  const dark = shade(color, -0.2);
+  const cols = Math.floor(w / cell);
+  const rows = Math.floor(h / cell);
+  // semilla por posición en el mundo: cada ladrillo tiene su propio patrón
+  const seed = Math.floor(x / cell) * 3 + Math.floor(y / cell) * 5;
+  for (let iy = 0; iy < rows; iy++) {
+    for (let ix = 0; ix < cols; ix++) {
+      const v = (ix * 7 + iy * 13 + ix * iy * 3 + seed) % 5;
+      if (v === 0) ctx.fillStyle = light;
+      else if (v === 1) ctx.fillStyle = dark;
+      else continue;
+      ctx.fillRect(x + ix * cell, y + iy * cell, cell, cell);
+    }
+  }
+  // bisel: fila superior clara, borde oscuro alrededor
+  ctx.fillStyle = light;
+  ctx.fillRect(x, y, w, 2);
+  ctx.strokeStyle = shade(color, -0.4);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+}
+
+// Ladrillo (o destello de ladrillo) según el `style` de la skin.
+function drawBrick(
+  ctx: CanvasRenderingContext2D,
+  sk: ArkanoidSkin,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+) {
+  if (sk.style === "glow") {
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+    ctx.restore();
+    // núcleo oscuro para que la fila no se empaste con el glow
+    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    ctx.fillRect(x + 5, y + 5, w - 10, h - 10);
+  } else if (sk.style === "rounded") {
+    roundRectPath(ctx, x + 1.5, y + 1.5, w - 3, h - 3, 5);
+    ctx.fillStyle = color;
+    ctx.fill();
+    // brillo superior redondeado
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    roundRectPath(ctx, x + 5, y + 3, w - 14, 4, 2);
+    ctx.fill();
+  } else if (sk.style === "pixel") {
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+    drawPixelTexture(ctx, x + 1, y + 1, w - 2, h - 2, color);
+  } else {
+    // flat (retro): color plano, idéntico al dibujo original
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  }
 }
 
 function createBlocks(layout: string[]): Block[] {
@@ -189,6 +303,7 @@ export class ArkanoidEngine {
   lives = 3;
   level = 1; // 1..5, mapea directo a "Nivel" del .player-hud
   state: GameState = "playing";
+  skin: SkinId = DEFAULT_SKIN; // solo apariencia: cambiarla no toca el estado de juego
 
   private paddle!: Paddle;
   private ball!: Ball;
@@ -202,6 +317,15 @@ export class ArkanoidEngine {
     private input: EngineInput,
   ) {
     this.restart();
+  }
+
+  // Cambia la skin en caliente (id inválido = "retro"). No reinicia la partida.
+  setSkin(id: string | null | undefined) {
+    this.skin = resolveSkin(id);
+  }
+
+  private get sk(): ArkanoidSkin {
+    return SKINS[this.skin];
   }
 
   private pressed(code: string): boolean {
@@ -412,46 +536,190 @@ export class ArkanoidEngine {
     this.updateBreakFlashes(dt);
   }
 
+  // Fondo del campo + rejilla y borde opcionales de la skin.
+  private drawBoard(sk: ArkanoidSkin) {
+    const ctx = this.ctx;
+    const fieldH = this.height - FIELD_TOP;
+    ctx.fillStyle = sk.boardBg;
+    ctx.fillRect(FIELD_X, FIELD_TOP, FIELD_WIDTH, fieldH);
+
+    if (sk.grid) {
+      ctx.strokeStyle = sk.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = FIELD_X + BLOCK_W; x < FIELD_X + FIELD_WIDTH; x += BLOCK_W) {
+        ctx.moveTo(x + 0.5, FIELD_TOP);
+        ctx.lineTo(x + 0.5, this.height);
+      }
+      for (let y = FIELD_TOP + BLOCK_W; y < this.height; y += BLOCK_W) {
+        ctx.moveTo(FIELD_X, y + 0.5);
+        ctx.lineTo(FIELD_X + FIELD_WIDTH, y + 0.5);
+      }
+      ctx.stroke();
+    }
+
+    if (sk.fieldBorder) {
+      ctx.save();
+      if (sk.style === "glow") {
+        ctx.shadowColor = sk.fieldBorder;
+        ctx.shadowBlur = 8;
+      }
+      ctx.strokeStyle = sk.fieldBorder;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(FIELD_X - 1, FIELD_TOP, FIELD_WIDTH + 2, fieldH + 2);
+      ctx.restore();
+    }
+  }
+
+  private drawFlash(sk: ArkanoidSkin, flash: BreakFlash) {
+    const ctx = this.ctx;
+    const alpha = Math.max(0, flash.remainingMs / BREAK_FLASH_MS);
+    const color = sk.colors.bricks[flash.color];
+    ctx.globalAlpha = alpha;
+    if (sk.style === "flat") {
+      // retro: rectángulo completo que se desvanece, como el original
+      ctx.fillStyle = color;
+      ctx.fillRect(flash.x, flash.y, BLOCK_W, BLOCK_H);
+    } else {
+      drawBrick(ctx, sk, flash.x, flash.y, BLOCK_W, BLOCK_H, color);
+      // destello blanco neutro encima de la forma de la skin
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(flash.x + 2, flash.y + 2, BLOCK_W - 4, BLOCK_H - 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawPaddle(sk: ArkanoidSkin) {
+    const ctx = this.ctx;
+    const { x, y, w, h } = this.paddle;
+    const color = sk.colors.paddle;
+
+    if (sk.style === "glow") {
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+      ctx.restore();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+      ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
+    } else if (sk.style === "rounded") {
+      roundRectPath(ctx, x, y, w, h, h / 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+      roundRectPath(ctx, x + h / 2, y + 2, w - h, 4, 2);
+      ctx.fill();
+    } else if (sk.style === "pixel") {
+      // "Vaus": cuerpo texturizado con extremos de acento
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+      drawPixelTexture(ctx, x, y, w, h, color);
+      const accent = sk.colors.paddleAccent;
+      if (accent) {
+        const capW = 12;
+        ctx.fillStyle = accent;
+        ctx.fillRect(x, y, capW, h);
+        ctx.fillRect(x + w - capW, y, capW, h);
+        drawPixelTexture(ctx, x, y, capW, h, accent);
+        drawPixelTexture(ctx, x + w - capW, y, capW, h, accent);
+      }
+    } else {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+    }
+  }
+
+  private drawBall(sk: ArkanoidSkin) {
+    const ctx = this.ctx;
+    const { x, y, w } = this.ball;
+    const r = w / 2;
+    const cx = x + r;
+    const cy = y + r;
+    const color = sk.colors.ball;
+
+    if (sk.style === "pixel") {
+      // círculo rasterizado en celdas de 4 px (cruz 4×4 sin esquinas) con luz y sombra
+      const c = w / 4;
+      ctx.fillStyle = color;
+      ctx.fillRect(x + c, y, c * 2, w);
+      ctx.fillRect(x, y + c, w, c * 2);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+      ctx.fillRect(x + c * 2, y + c * 2, c, c);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x + c, y + c, c, c);
+      return;
+    }
+
+    ctx.save();
+    if (sk.style === "glow") {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14;
+    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    if (sk.style === "glow") {
+      // núcleo blanco: la bola se distingue de los ladrillos del mismo tono
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (sk.style === "rounded") {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   private drawField() {
     const ctx = this.ctx;
-    ctx.fillStyle = "#0a0a12";
-    ctx.fillRect(FIELD_X, FIELD_TOP, FIELD_WIDTH, this.height - FIELD_TOP);
+    const sk = this.sk;
+    this.drawBoard(sk);
 
     for (const block of this.blocks) {
       if (!block.alive) continue;
-      ctx.fillStyle = block.color;
-      ctx.fillRect(block.x + 1, block.y + 1, block.w - 2, block.h - 2);
+      drawBrick(
+        ctx,
+        sk,
+        block.x,
+        block.y,
+        block.w,
+        block.h,
+        sk.colors.bricks[block.color],
+      );
     }
 
-    for (const flash of this.breakFlashes) {
-      ctx.globalAlpha = Math.max(0, flash.remainingMs / BREAK_FLASH_MS);
-      ctx.fillStyle = flash.color;
-      ctx.fillRect(flash.x, flash.y, BLOCK_W, BLOCK_H);
-      ctx.globalAlpha = 1;
+    for (const flash of this.breakFlashes) this.drawFlash(sk, flash);
+
+    this.drawPaddle(sk);
+    this.drawBall(sk);
+  }
+
+  // Aplica color/fuente del texto según la skin (halo en neón, negrita en pixel).
+  private setTextStyle(sk: ArkanoidSkin, size: number, bold = false) {
+    const ctx = this.ctx;
+    ctx.fillStyle = sk.colors.hud;
+    ctx.font = `${bold || sk.style === "pixel" ? "bold " : ""}${size}px monospace`;
+    if (sk.style === "glow") {
+      ctx.shadowColor = sk.colors.hud;
+      ctx.shadowBlur = 8;
     }
-
-    ctx.fillStyle = "#00f5ff";
-    ctx.fillRect(this.paddle.x, this.paddle.y, this.paddle.w, this.paddle.h);
-
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(
-      this.ball.x + this.ball.w / 2,
-      this.ball.y + this.ball.h / 2,
-      this.ball.w / 2,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
   }
 
   private drawHUD() {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    const sk = this.sk;
+    ctx.fillStyle = sk.colors.hudBg;
     ctx.fillRect(0, 0, this.width, HUD_HEIGHT);
 
-    ctx.fillStyle = "#fff";
-    ctx.font = "12px monospace";
+    ctx.save();
+    this.setTextStyle(sk, 12);
 
     ctx.textAlign = "left";
     ctx.fillText(`SCORE ${this.score}`, 8, 14);
@@ -461,34 +729,36 @@ export class ArkanoidEngine {
 
     ctx.textAlign = "right";
     ctx.fillText(`VIDAS ${this.lives}`, this.width - 8, 14);
+    ctx.restore();
   }
 
   private drawLevelCompleteOverlay() {
     const ctx = this.ctx;
+    const sk = this.sk;
     ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
     ctx.fillRect(0, 0, this.width, this.height);
 
-    ctx.fillStyle = "#fff";
+    ctx.save();
+    this.setTextStyle(sk, 28, true);
     ctx.textAlign = "center";
-
-    ctx.font = "bold 28px monospace";
     ctx.fillText(
       `Nivel ${this.level} completado`,
       this.width / 2,
       this.height / 2 - 16,
     );
 
-    ctx.font = "14px monospace";
+    this.setTextStyle(sk, 14);
     ctx.fillText(
       "Presiona ESPACIO para continuar",
       this.width / 2,
       this.height / 2 + 20,
     );
+    ctx.restore();
   }
 
   draw() {
     const ctx = this.ctx;
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = this.sk.outerBg;
     ctx.fillRect(0, 0, this.width, this.height);
 
     this.drawField();

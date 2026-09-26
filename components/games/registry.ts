@@ -9,10 +9,13 @@ import type {
   RefObject,
 } from "react";
 import { ArkanoidGame } from "@/components/games/arkanoid/arkanoid-game";
+import { SKIN_OPTIONS as ARKANOID_SKINS } from "@/components/games/arkanoid/skins";
 import { TouchControls as ArkanoidTouchControls } from "@/components/games/arkanoid/touch-controls";
 import { AsteroidsGame } from "@/components/games/asteroids/asteroids-game";
+import { SKIN_OPTIONS as ASTEROIDS_SKINS } from "@/components/games/asteroids/skins";
 import { TouchControls as AsteroidsTouchControls } from "@/components/games/asteroids/touch-controls";
 import { SnakeGame } from "@/components/games/snake/snake-game";
+import { SKIN_OPTIONS as SNAKE_SKINS } from "@/components/games/snake/skins";
 import { TouchControls as SnakeTouchControls } from "@/components/games/snake/touch-controls";
 import { TetrisGame } from "@/components/games/tetris/tetris-game";
 import { TouchControls as TetrisTouchControls } from "@/components/games/tetris/touch-controls";
@@ -30,10 +33,14 @@ export interface GameRegistryEntry {
       onLivesChange(lives: number): void; // para tetris recibe engine.lines
       onLevelChange(level: number): void;
       onGameOver(finalScore: number): void;
+      skin?: string; // id de skin visual; solo lo usan los juegos con `skins`
     } & RefAttributes<GameHandle>
   >;
   TouchControls?: ComponentType<{ gameRef: RefObject<GameHandle | null> }>;
   hudLivesLabel?: string; // default "Vidas"; "Líneas" para tetris
+  // Skins visuales disponibles (JugarClient arranca en "retro"). Sin este campo,
+  // JugarClient no muestra el selector de skin.
+  skins?: { id: string; label: string }[];
 }
 
 // Cada juego expone un handle más específico que GameHandle (p. ej. AsteroidsGameHandle
@@ -46,16 +53,19 @@ export const GAME_REGISTRY: Record<string, GameRegistryEntry> = {
     Component: ArkanoidGame as unknown as GameRegistryEntry["Component"],
     TouchControls:
       ArkanoidTouchControls as unknown as GameRegistryEntry["TouchControls"],
+    skins: ARKANOID_SKINS,
   },
   asteroides: {
     Component: AsteroidsGame as unknown as GameRegistryEntry["Component"],
     TouchControls:
       AsteroidsTouchControls as unknown as GameRegistryEntry["TouchControls"],
+    skins: ASTEROIDS_SKINS,
   },
   snake: {
     Component: SnakeGame as unknown as GameRegistryEntry["Component"],
     TouchControls:
       SnakeTouchControls as unknown as GameRegistryEntry["TouchControls"],
+    skins: SNAKE_SKINS,
   },
   tetris: {
     Component: TetrisGame as unknown as GameRegistryEntry["Component"],

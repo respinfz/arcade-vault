@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/components/providers/user-provider";
 import { GAME_REGISTRY, type GameHandle } from "@/components/games/registry";
 import type { Game } from "@/lib/types";
+
+// Skin con la que arranca todo juego con skins (y fallback ante un valor inválido)
+const DEFAULT_SKIN = "retro";
 
 export default function JugarClient({ game }: { game: Game }) {
   const router = useRouter();
@@ -20,6 +23,39 @@ export default function JugarClient({ game }: { game: Game }) {
   const [over, setOver] = useState(false);
   const [name, setName] = useState(user ? user.name : "INVITADO");
   const [saved, setSaved] = useState(false);
+
+  // Skin visual: solo para juegos con `skins` en el registry. Se persiste únicamente
+  // en localStorage ("av_skin:<id>"), nunca en Supabase.
+  const skinKey = `av_skin:${game.id}`;
+  const [skin, setSkin] = useState(DEFAULT_SKIN);
+  const skinIds = entry?.skins?.map((s) => s.id).join(",") ?? "";
+
+  useEffect(() => {
+    if (!skinIds) return;
+    try {
+      const stored = localStorage.getItem(skinKey);
+      // Lectura de localStorage diferida a post-montaje a propósito (evita
+      // desajustes de hidratación): el primer render siempre usa "retro".
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSkin(
+        stored && skinIds.split(",").includes(stored) ? stored : DEFAULT_SKIN,
+      );
+    } catch {
+      // localStorage no disponible (modo privado, etc.) — se queda en "retro".
+    }
+  }, [skinKey, skinIds]);
+
+  const changeSkin = (e: ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value;
+    setSkin(next);
+    try {
+      localStorage.setItem(skinKey, next);
+    } catch {
+      // localStorage no disponible — la skin se aplica solo en esta sesión.
+    }
+    // Devuelve el foco al juego: que las flechas no sigan cambiando el <select>
+    e.target.blur();
+  };
 
   useEffect(() => {
     if (over || paused || entry) return;
@@ -80,6 +116,23 @@ export default function JugarClient({ game }: { game: Game }) {
           </div>
         </div>
         <div className="hud-actions">
+          {entry?.skins?.length ? (
+            <label className="skin-picker">
+              <span className="skin-picker-l">Skin</span>
+              <select
+                className="skin-select"
+                value={skin}
+                onChange={changeSkin}
+                title="Cambiar skin visual"
+              >
+                {entry.skins.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <button className="btn yellow" onClick={() => setPaused((p) => !p)}>
             {paused ? "REANUDAR" : "PAUSA"}
           </button>
@@ -95,13 +148,14 @@ export default function JugarClient({ game }: { game: Game }) {
         </div>
       </div>
 
-      <div className="crt">
+      <div className="crt" data-skin={entry?.skins?.length ? skin : undefined}>
         <div className="crt-screen">
           {entry ? (
             <>
               <entry.Component
                 ref={gameRef}
                 paused={paused}
+                skin={skin}
                 onScoreChange={setScore}
                 onLivesChange={setLives}
                 onLevelChange={setLevel}
