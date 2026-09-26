@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { SnakeEngine, type EngineInput } from "./engine";
+import { DEFAULT_SKIN } from "./skins";
 
 const WIDTH = 800;
 const HEIGHT = 600;
@@ -27,11 +28,12 @@ export interface SnakeGameProps {
   onLivesChange: (lives: number) => void;
   onLevelChange: (level: number) => void;
   onGameOver: (finalScore: number) => void;
+  skin?: string; // id de skin visual (ver ./skins); inválido o ausente = "retro"
 }
 
 export const SnakeGame = forwardRef<SnakeGameHandle, SnakeGameProps>(
   function SnakeGame(
-    { paused, onScoreChange, onLivesChange, onLevelChange, onGameOver },
+    { paused, onScoreChange, onLivesChange, onLevelChange, onGameOver, skin },
     ref,
   ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,6 +44,13 @@ export const SnakeGame = forwardRef<SnakeGameHandle, SnakeGameProps>(
     useEffect(() => {
       pausedRef.current = paused;
     }, [paused]);
+
+    // Skin: se aplica en caliente sin recrear el motor ni el loop (no reinicia la partida)
+    const skinRef = useRef(skin ?? DEFAULT_SKIN);
+    useEffect(() => {
+      skinRef.current = skin ?? DEFAULT_SKIN;
+      engineRef.current?.setSkin(skinRef.current);
+    }, [skin]);
 
     const onScoreChangeRef = useRef(onScoreChange);
     const onLivesChangeRef = useRef(onLivesChange);
@@ -96,6 +105,7 @@ export const SnakeGame = forwardRef<SnakeGameHandle, SnakeGameProps>(
       if (!canvas || !ctx) return;
 
       const engine = new SnakeEngine(ctx, WIDTH, HEIGHT, inputRef.current);
+      engine.setSkin(skinRef.current);
       engineRef.current = engine;
 
       let raf = 0;
@@ -150,6 +160,13 @@ export const SnakeGame = forwardRef<SnakeGameHandle, SnakeGameProps>(
       const input = inputRef.current;
 
       const handleKeyDown = (e: KeyboardEvent) => {
+        // Teclas dirigidas a un control de formulario (p. ej. el selector de skin) no
+        // giran la serpiente ni se les anula el comportamiento nativo.
+        if (
+          e.target instanceof Element &&
+          e.target.closest("select, input, textarea")
+        )
+          return;
         const code =
           e.code === "KeyW"
             ? "ArrowUp"

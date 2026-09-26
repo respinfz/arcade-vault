@@ -4,8 +4,8 @@ Juegos de Arcade Vault con motor real (canvas + `engine.ts` propio), registrados
 
 Se omiten los placeholders del catálogo que solo corren la simulación falsa de puntaje (`gloton`, `invasores`, `ranaria`, `duelo-pixel`).
 
-| Juego      | ID           | Categoría | Spec                               | Ruta                 |
-| ---------- | ------------ | --------- | ---------------------------------- | -------------------- |
+| Juego      | ID           | Categoría | Spec                                  | Ruta                 |
+| ---------- | ------------ | --------- | ------------------------------------- | -------------------- |
 | ASTEROIDES | `asteroides` | SHOOTER   | [05](../specs/05-juego-asteroides.md) | `/juegos/asteroides` |
 | TETRIS     | `tetris`     | PUZZLE    | [07](../specs/07-juego-tetris.md)     | `/juegos/tetris`     |
 | ARKANOID   | `arkanoid`   | ARCADE    | [08](../specs/08-juego-arkanoid.md)   | `/juegos/arkanoid`   |
@@ -23,6 +23,7 @@ Tu nave triangular flota en un campo de asteroides toroidal. Dispara y rota para
 - **Teclado:** `←`/`→` rotar · `↑` propulsar · `Espacio` disparar
 - **Táctil:** ◀/▶ rotar y ▲ propulsar (mantener presionado) · ● FUEGO (tap)
 - **Fin de partida:** la nave se queda sin vidas.
+- **Skins:** `retro` (default) · `neon` · `pastel` · `pixel` — ver [game-with-themes.md](game-with-themes.md#asteroides--asteroides).
 
 ## TETRIS
 
@@ -46,6 +47,7 @@ Controlás una pala luminosa que devuelve una bola de plasma contra murallas de 
 - **Teclado:** `←`/`→` mover pala · `Espacio` lanzar bola / continuar nivel
 - **Táctil:** ◀/▶ mover · lanzar (tap)
 - **Fin de partida:** se pierden las tres vidas.
+- **Skins:** `retro` (default) · `neon` · `pastel` · `pixel` — ver [game-with-themes.md](game-with-themes.md#arkanoid--arkanoid).
 
 ## SNAKE
 
@@ -57,3 +59,4 @@ Guía a la serpiente por una grilla neón cazando frutas (21 sprites en `public/
 - **Teclado:** flechas o `W`/`A`/`S`/`D`
 - **Táctil:** cruceta de 4 botones ▲/▼/◀/▶ (tap)
 - **Fin de partida:** choque contra un borde o contra el propio cuerpo.
+- **Skins:** `retro` (default) · `neon` · `pastel` · `pixel` — ver [game-with-themes.md](game-with-themes.md#snake--snake).
