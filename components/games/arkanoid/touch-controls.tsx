@@ -1,35 +1,13 @@
 "use client";
 
-import { useSyncExternalStore, type RefObject } from "react";
+import type { RefObject } from "react";
 import type { ArkanoidGameHandle } from "./arkanoid-game";
 
 export interface TouchControlsProps {
   gameRef: RefObject<ArkanoidGameHandle | null>;
 }
 
-function subscribeToPointerType(callback: () => void) {
-  const mql = window.matchMedia("(pointer: coarse)");
-  mql.addEventListener("change", callback);
-  return () => mql.removeEventListener("change", callback);
-}
-
-function isCoarsePointer() {
-  return window.matchMedia("(pointer: coarse)").matches;
-}
-
-function isCoarsePointerServerSnapshot() {
-  return false;
-}
-
 export function TouchControls({ gameRef }: TouchControlsProps) {
-  const isTouchDevice = useSyncExternalStore(
-    subscribeToPointerType,
-    isCoarsePointer,
-    isCoarsePointerServerSnapshot,
-  );
-
-  if (!isTouchDevice) return null;
-
   return (
     <div className="touch-controls">
       <div className="touch-controls-move">

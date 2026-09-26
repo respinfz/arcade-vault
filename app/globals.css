@@ -1282,42 +1282,106 @@ a {
   }
 }
 
-/* touch controls (juegos con motor real, ej. Asteroides) */
-.touch-controls {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
+/* ===== consola táctil (SPEC 11) =====
+   JugarClient la monta bajo .crt solo en dispositivos táctiles ("(pointer: coarse)").
+   Es la mitad inferior del mismo gabinete: repite el aro del bisel de .crt, y los
+   botones son teclas físicas neón que se hunden al pulsar. */
+.touch-console {
+  width: var(--touch-stage-w, 100%);
+  margin: 18px auto 0;
+  padding: 12px 14px 14px;
+  border-radius: 16px 16px 28px 28px;
+  background: linear-gradient(180deg, #09090f, #050507);
+  box-shadow:
+    0 0 0 6px #1b1b22,
+    0 0 0 7px #2a2a35,
+    0 24px 60px -24px rgba(255, 0, 110, 0.3);
+  transition:
+    opacity 160ms,
+    filter 160ms;
+}
+/* En pausa / fin de juego: atenuada y sin toques (nada queda encolado en el motor) */
+.touch-console.is-inactive {
+  opacity: 0.35;
+  filter: grayscale(0.7);
   pointer-events: none;
 }
-.touch-controls-move {
-  position: absolute;
-  left: 14px;
-  bottom: 14px;
+
+/* Grupo de movimiento a la izquierda, acción(es) a la derecha. Tetris agrega
+   .touch-btn-drop, que comparte columna con .touch-btn-fire en diagonal (como A/B). */
+.touch-controls {
   display: grid;
-  grid-template-columns: repeat(3, 44px);
-  grid-template-areas: ". up ." "left . right";
-  gap: 8px;
-  pointer-events: auto;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
 }
+.touch-controls-move {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(2, 56px);
+  grid-template-areas: ". up ." "left . right";
+  gap: 4px;
+}
+
+/* Tecla base: el color sale de --btn-rgb para que cada variante solo lo cambie */
 .touch-btn {
-  width: 44px;
-  height: 44px;
+  --btn-rgb: 0, 245, 255;
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   font-family: var(--pixel);
   font-size: 16px;
-  color: var(--cyan);
-  background: rgba(0, 245, 255, 0.08);
-  border: 1px solid var(--cyan);
-  border-radius: 10px;
+  color: rgb(var(--btn-rgb));
+  text-shadow: 0 0 8px rgba(var(--btn-rgb), 0.8);
+  background:
+    radial-gradient(
+      circle at 50% 30%,
+      rgba(var(--btn-rgb), 0.16),
+      rgba(var(--btn-rgb), 0.03) 70%
+    ),
+    #0b0b12;
+  border: 1px solid rgba(var(--btn-rgb), 0.7);
+  border-radius: 14px;
+  box-shadow:
+    0 4px 0 #1b1b22,
+    0 4px 0 1px rgba(var(--btn-rgb), 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 12px rgba(var(--btn-rgb), 0.16);
+  cursor: pointer;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 60ms,
+    box-shadow 60ms,
+    background 60ms;
 }
 .touch-btn:active {
-  background: rgba(0, 245, 255, 0.25);
-  box-shadow: 0 0 14px rgba(0, 245, 255, 0.55);
+  transform: translateY(3px);
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(var(--btn-rgb), 0.38),
+      rgba(var(--btn-rgb), 0.1) 75%
+    ),
+    #0b0b12;
+  box-shadow:
+    0 1px 0 #1b1b22,
+    0 1px 0 1px rgba(var(--btn-rgb), 0.5),
+    inset 0 0 14px rgba(var(--btn-rgb), 0.45),
+    0 0 22px rgba(var(--btn-rgb), 0.6);
+}
+.touch-btn:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 3px;
 }
 .touch-controls-move .touch-btn:nth-child(1) {
   grid-area: left;
@@ -1328,74 +1392,55 @@ a {
 .touch-controls-move .touch-btn:nth-child(3) {
   grid-area: right;
 }
+
+/* Acción principal: la tecla más grande y redonda de la consola */
 .touch-btn-fire {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  width: 64px;
-  height: 64px;
+  --btn-rgb: 255, 0, 110;
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  width: 72px;
+  height: 72px;
   font-size: 20px;
-  color: var(--magenta);
-  background: rgba(255, 0, 110, 0.1);
-  border-color: var(--magenta);
   border-radius: 50%;
-  pointer-events: auto;
 }
-.touch-btn-fire:active {
-  background: rgba(255, 0, 110, 0.3);
-  box-shadow: 0 0 18px rgba(255, 0, 110, 0.6);
+.touch-controls:has(.touch-btn-drop) {
+  grid-template-columns: auto 1fr 104px;
+}
+.touch-controls:has(.touch-btn-drop) .touch-btn-fire {
+  grid-row: 2;
+  justify-self: end;
+  margin-top: -24px;
 }
 .touch-btn-drop {
-  position: absolute;
-  right: 98px;
-  bottom: 32px;
-  width: 52px;
-  height: 52px;
+  --btn-rgb: 245, 255, 0;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: start;
   flex-direction: column;
   gap: 2px;
   font-size: 12px;
   line-height: 1;
-  color: var(--yellow);
-  background: rgba(245, 255, 0, 0.1);
-  border-color: var(--yellow);
   border-radius: 50%;
-  pointer-events: auto;
-}
-.touch-btn-drop:active {
-  background: rgba(245, 255, 0, 0.3);
-  box-shadow: 0 0 16px rgba(245, 255, 0, 0.6);
 }
 
-/* cruceta de 4 direcciones (Snake): es el único control del juego, sin botón
-   de acción, así que ocupa el centro inferior de la pantalla en vez de una
-   esquina como .touch-controls-move (que reserva la otra esquina para un
-   botón de fuego que este juego no tiene). */
+/* Cruceta de 4 direcciones (Snake): es el único control del juego, sin botón
+   de acción, así que ocupa el centro de la consola. */
 .touch-controls-dpad {
-  position: absolute;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
+  grid-column: 1 / -1;
+  grid-row: 1 / span 2;
+  justify-self: center;
   display: grid;
-  grid-template-columns: repeat(3, 48px);
-  grid-template-rows: repeat(3, 48px);
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 56px);
   grid-template-areas:
     ". up ."
     "left . right"
     ". down .";
-  gap: 6px;
-  pointer-events: auto;
+  gap: 4px;
 }
 .touch-controls-dpad .touch-btn {
-  width: 48px;
-  height: 48px;
+  --btn-rgb: 0, 255, 136;
   font-size: 18px;
-  color: var(--green);
-  background: rgba(0, 255, 136, 0.08);
-  border-color: var(--green);
-}
-.touch-controls-dpad .touch-btn:active {
-  background: rgba(0, 255, 136, 0.25);
-  box-shadow: 0 0 14px rgba(0, 255, 136, 0.55);
 }
 .touch-controls-dpad .touch-btn:nth-child(1) {
   grid-area: up;
@@ -1408,6 +1453,111 @@ a {
 }
 .touch-controls-dpad .touch-btn:nth-child(4) {
   grid-area: down;
+}
+
+/* ===== reproductor en modo táctil (.av-player--touch) =====
+   HUD + pantalla + consola deben entrar juntos en la altura visible. El ancho del
+   "escenario" (.crt y .touch-console) se limita según 100dvh menos nav, HUD,
+   consola y márgenes, manteniendo el 4:3 de la pantalla. */
+.av-player.av-player--touch {
+  --touch-nav-h: 54px;
+  --touch-hud-h: 96px;
+  --touch-console-h: 150px;
+  --touch-stage-w: min(
+    100%,
+    calc(
+      (
+          100dvh - var(--touch-nav-h) - var(--touch-hud-h) -
+            var(--touch-console-h) - 58px
+        ) *
+        4 / 3 + 20px
+    )
+  );
+  margin: 8px auto 0;
+  padding: 0 12px 12px;
+}
+.av-player.av-player--touch:has(.touch-controls-dpad) {
+  --touch-console-h: 206px;
+}
+
+.av-player--touch .player-hud {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.av-player--touch .hud-stat {
+  gap: 3px;
+}
+.av-player--touch .hud-stat .l {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+.av-player--touch .hud-stat .v {
+  font-size: 10px;
+}
+.av-player--touch .hud-actions {
+  gap: 6px;
+  justify-content: flex-end;
+}
+.av-player--touch .hud-actions .btn {
+  padding: 8px 10px;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+/* El texto "Skin" se oculta a la vista pero sigue nombrando al <select> */
+.av-player--touch .skin-picker {
+  margin-right: auto;
+  padding: 0;
+}
+.av-player--touch .skin-picker-l {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.av-player--touch .skin-select {
+  min-height: 30px;
+  min-width: 0;
+  padding: 0 26px 0 8px;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  background-position:
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+}
+
+.av-player--touch .crt {
+  width: var(--touch-stage-w);
+  margin: 0 auto;
+  padding: 10px;
+  border-radius: 16px 16px 12px 12px;
+}
+.av-player--touch .crt-screen {
+  border-radius: 8px / 16px;
+}
+.av-player--touch .crt-bottom {
+  display: none;
+}
+
+/* Sin scroll, zoom por doble toque, selección ni menú contextual sobre el juego */
+.av-player--touch .crt-screen,
+.touch-console {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .touch-console,
+  .touch-btn {
+    transition: none;
+  }
 }
 
 /* game over modal */
