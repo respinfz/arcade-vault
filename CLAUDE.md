@@ -48,6 +48,8 @@ Project subagent **`skin-designer`** (`.claude/agents/skin-designer.md`) receive
 
 Project subagent **`mobile-porter`** (`.claude/agents/mobile-porter.md`) receives the id of an already-implemented game without mobile support (required) and ports its player to the SPEC 11 touch contract (`touch-controls.tsx` rendered in `.touch-console` below the CRT, registry `TouchControls` entry, ≥56px / ≥64px buttons, no overlays on the canvas), without touching desktop. It verifies by Playwright touch emulation at 360×640 and 390×844 portrait plus desktop, runs lint + build, and records ported games in `references/mobile-ported-games.md`.
 
+Project subagent **`game-performance-booster`** (`.claude/agents/game-performance-booster.md`) receives the id of an already-implemented game (required), audits its render/loop against the SPEC 13 anti-pattern checklist (`specs/13-rendimiento-frogger.md`: per-entity `shadowBlur`/gradients/textures, static background redrawn every frame, per-frame garbage, redraw while paused, …), measures every skin × desktop/mobile with `scripts/perf/measure-fps.js` against `next start`, and — only where the thresholds (`avgFps ≥ 55`, `p95 < 20 ms`, ≤ 1 % frames > 33 ms) fail or the fix is cheap — applies the SPEC 13 recipe (offscreen caches, sprites, integer positions, no pause redraw) without changing gameplay or look. It verifies with deterministic canvas diffs and a Node side-by-side engine run, runs lint + build, and records reviewed games in `references/performance-boosted-games.md`.
+
 Branches are merged into `main` via PRs, one per spec.
 
 ## Architecture

@@ -41,9 +41,12 @@ export const ArkanoidGame = forwardRef<ArkanoidGameHandle, ArkanoidGameProps>(
 
     // Skin: se aplica en caliente sin recrear el motor ni el loop (no reinicia la partida)
     const skinRef = useRef(skin ?? DEFAULT_SKIN);
+    // En pausa el loop no redibuja (SPEC 13): un cambio de skin pide un frame nuevo.
+    const redrawRef = useRef(false);
     useEffect(() => {
       skinRef.current = skin ?? DEFAULT_SKIN;
       engineRef.current?.setSkin(skinRef.current);
+      redrawRef.current = true;
     }, [skin]);
 
     const onScoreChangeRef = useRef(onScoreChange);
@@ -90,6 +93,7 @@ export const ArkanoidGame = forwardRef<ArkanoidGameHandle, ArkanoidGameProps>(
       let prevLives = engine.lives;
       let prevLevel = engine.level;
       let prevState = engine.state;
+      let wasPaused = false;
 
       onScoreChangeRef.current(prevScore);
       onLivesChangeRef.current(prevLives);
@@ -100,10 +104,18 @@ export const ArkanoidGame = forwardRef<ArkanoidGameHandle, ArkanoidGameProps>(
           lastTime === null ? 0 : Math.min((ts - lastTime) / 1000, 0.05);
         lastTime = ts;
 
-        if (!pausedRef.current) {
+        // En pausa se congela update() y la imagen no cambia: se dibuja solo en el
+        // primer frame de la pausa y cuando cambia la skin. El loop sigue vivo
+        // (lastTime avanza), así que al reanudar el dt no salta.
+        const paused = pausedRef.current;
+        if (!paused) {
           engine.update(dt);
+          engine.draw();
+        } else if (!wasPaused || redrawRef.current) {
+          engine.draw();
         }
-        engine.draw();
+        redrawRef.current = false;
+        wasPaused = paused;
 
         if (engine.score !== prevScore) {
           prevScore = engine.score;

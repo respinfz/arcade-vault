@@ -96,18 +96,44 @@ const FRUIT_ATLAS: Record<
 };
 const FRUIT_SPRITE_KEYS = Object.keys(FRUIT_ATLAS);
 
+// Contexto de dibujo: el del canvas visible o el de una capa offscreen (caché).
+type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+// Sprite pre-renderizado (segmento o plato de la fruta) para la skin activa.
+interface Sprite {
+  canvas: OffscreenCanvas;
+  pad: number; // margen alrededor de la celda (cabe el halo de glow)
+}
+
+// Margen del sprite alrededor de la celda: el shadowBlur más grande es CELL * 0.5 = 20
+// y la gaussiana llega a ~1,5 × blur (30 px), así que 32 px no recortan el halo. En
+// pixel también se usa: un sprite de 40×40 justo rasteriza la textura distinto al
+// canvas visible (diffs medidos), con margen sale igual.
+const SPRITE_PAD = 32;
+
+// Separación lateral de los ojos: constante de módulo para no crear un array por frame.
+const EYE_SIDES = [-1, 1] as const;
+
+// Memo de colores derivados: evita parsear hex y crear strings en cada frame.
+const shadeCache = new Map<string, string>(); // clave `${hex}|${amt}`
+
 /* Aclara (amt > 0) u oscurece (amt < 0) un color '#rrggbb' (como shade() del Tetris). */
 function shade(hex: string, amt: number): string {
+  const key = `${hex}|${amt}`;
+  const cached = shadeCache.get(key);
+  if (cached) return cached;
   const n = parseInt(hex.slice(1), 16);
   const clamp = (v: number) =>
     Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
-  return `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  const out = `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  shadeCache.set(key, out);
+  return out;
 }
 
 /* Textura de píxeles determinista (no parpadea entre frames) sobre una celda,
    portada de drawPixelTexture() del Tetris. */
 function drawPixelTexture(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2D,
   px: number,
   py: number,
   size: number,
@@ -153,8 +179,18 @@ export class SnakeEngine {
   private tickAccumMs = 0;
   private image: HTMLImageElement;
 
+  // Cachés de render de la skin activa (se vacían en setSkin()). null = sin construir
+  // (o sin OffscreenCanvas: entonces se dibuja directo, igual que antes).
+  private bgLayer: OffscreenCanvas | null = null; // fondo + grilla
+  private sprites = new Map<string, Sprite>(); // clave: color del segmento / "fruitBack"
+  // Textos del HUD: se regeneran solo cuando cambia el valor.
+  private hudScore = -1;
+  private hudScoreText = "";
+  private hudLevel = -1;
+  private hudLevelText = "";
+
   constructor(
-    private ctx: CanvasRenderingContext2D,
+    private ctx: Ctx2D,
     private width: number,
     private height: number,
     private input: EngineInput,
@@ -192,8 +228,11 @@ export class SnakeEngine {
   }
 
   // Cambia la skin en caliente: no reinicia ni altera puntaje/estado.
+  // También vacía las cachés de render: se reconstruyen con la skin nueva.
   setSkin(id: string): void {
     this.skin = resolveSkin(id);
+    this.bgLayer = null;
+    this.sprites.clear();
   }
 
   private get activeSkin(): SnakeSkin {
@@ -302,7 +341,20 @@ export class SnakeEngine {
     }
   }
 
-  private drawGrid() {
+  // Ejecuta `draw` sobre otro contexto (una capa offscreen): todas las rutinas de
+  // dibujo usan this.ctx, así que se redirige mientras dura (técnica de Frogger).
+  private drawInto(target: Ctx2D, draw: () => void): void {
+    const main = this.ctx;
+    this.ctx = target;
+    try {
+      draw();
+    } finally {
+      this.ctx = main;
+    }
+  }
+
+  // Fondo y grilla: no cambian durante la partida.
+  private drawStaticGrid() {
     const ctx = this.ctx;
     const sk = this.activeSkin;
     ctx.fillStyle = sk.boardBg;
@@ -325,15 +377,63 @@ export class SnakeEngine {
     }
   }
 
+  // Capa del fondo para la skin activa; se construye la primera vez.
+  // null sin OffscreenCanvas (el motor no toca window/document): se dibuja directo.
+  private getBgLayer(): OffscreenCanvas | null {
+    if (this.bgLayer) return this.bgLayer;
+    if (typeof OffscreenCanvas === "undefined") return null;
+    const layer = new OffscreenCanvas(this.width, this.height);
+    const layerCtx = layer.getContext("2d");
+    if (!layerCtx) return null;
+    this.drawInto(layerCtx, () => this.drawStaticGrid());
+    this.bgLayer = layer;
+    return layer;
+  }
+
+  private drawGrid() {
+    const layer = this.getBgLayer();
+    if (layer) this.ctx.drawImage(layer, 0, 0);
+    else this.drawStaticGrid();
+  }
+
+  // Solo se cachean en sprites los estilos con efecto caro por celda: glow
+  // (shadowBlur) y pixel (textura celda a celda + shade()). flat y rounded son uno o
+  // dos roundRect planos: dibujarlos directo es más barato que copiar un sprite.
+  private get cellSprites(): boolean {
+    const style = this.activeSkin.style;
+    return (
+      (style === "glow" || style === "pixel") &&
+      typeof OffscreenCanvas !== "undefined"
+    );
+  }
+
+  // Sprite de una celda (segmento de un color o plato de la fruta) con el halo o la
+  // textura ya aplicados. Se construye bajo demanda; null sin OffscreenCanvas (se
+  // dibuja directo). `draw(px, py)` pinta la celda en (px, py).
+  private getSprite(
+    key: string,
+    draw: (px: number, py: number) => void,
+  ): Sprite | null {
+    const cached = this.sprites.get(key);
+    if (cached) return cached;
+    if (typeof OffscreenCanvas === "undefined") return null;
+    const pad = SPRITE_PAD;
+    const canvas = new OffscreenCanvas(CELL + pad * 2, CELL + pad * 2);
+    const spriteCtx = canvas.getContext("2d");
+    if (!spriteCtx) return null;
+    this.drawInto(spriteCtx, () => draw(pad, pad));
+    const sprite: Sprite = { canvas, pad };
+    this.sprites.set(key, sprite);
+    return sprite;
+  }
+
   // "Plato" bajo la fruta según el estilo: halo (glow), disco suave (rounded) o
   // baldosa texturizada (pixel). Retro no dibuja nada.
-  private drawFruitBack(fx: number, fy: number) {
+  private drawFruitBackAt(px: number, py: number) {
     const ctx = this.ctx;
     const sk = this.activeSkin;
     const color = sk.colors.fruitBack;
     if (!color) return;
-    const px = fx * CELL;
-    const py = fy * CELL;
     const cx = px + CELL / 2;
     const cy = py + CELL / 2;
 
@@ -359,6 +459,21 @@ export class SnakeEngine {
     }
   }
 
+  private readonly paintFruitBack = (px: number, py: number) =>
+    this.drawFruitBackAt(px, py);
+
+  private drawFruitBack(fx: number, fy: number) {
+    if (!this.activeSkin.colors.fruitBack) return;
+    const px = fx * CELL;
+    const py = fy * CELL;
+    const sprite = this.cellSprites
+      ? this.getSprite("fruitBack", this.paintFruitBack)
+      : null;
+    if (sprite)
+      this.ctx.drawImage(sprite.canvas, px - sprite.pad, py - sprite.pad);
+    else this.drawFruitBackAt(px, py);
+  }
+
   private drawFruit() {
     if (!this.fruit) return;
     this.drawFruitBack(this.fruit.x, this.fruit.y);
@@ -382,12 +497,11 @@ export class SnakeEngine {
     );
   }
 
-  // Un segmento de la serpiente, ramificado por `style` como drawBlock() del Tetris.
-  private drawSegment(cx: number, cy: number, color: string) {
+  // Un segmento de la serpiente en (px, py), ramificado por `style` como drawBlock()
+  // del Tetris.
+  private drawSegmentAt(px: number, py: number, color: string) {
     const ctx = this.ctx;
     const sk = this.activeSkin;
-    const px = cx * CELL;
-    const py = cy * CELL;
 
     if (sk.style === "glow") {
       ctx.save();
@@ -431,6 +545,21 @@ export class SnakeEngine {
     }
   }
 
+  // En glow y pixel, un sprite por color de segmento (cabeza, cuerpo, cuerpo alterno).
+  // Las celdas están en múltiplos enteros de CELL, así que drawImage no interpola
+  // subpíxeles.
+  private drawSegment(cx: number, cy: number, color: string) {
+    const px = cx * CELL;
+    const py = cy * CELL;
+    let sprite = this.sprites.get(color) ?? null;
+    // La closure solo se crea al construir el sprite (una vez por color y skin).
+    if (!sprite && this.cellSprites)
+      sprite = this.getSprite(color, (x, y) => this.drawSegmentAt(x, y, color));
+    if (sprite)
+      this.ctx.drawImage(sprite.canvas, px - sprite.pad, py - sprite.pad);
+    else this.drawSegmentAt(px, py, color);
+  }
+
   // Ojos de la cabeza mirando hacia la dirección actual (solo skins con `eye`).
   private drawEyes(head: Cell) {
     const eye = this.activeSkin.colors.eye;
@@ -443,7 +572,8 @@ export class SnakeEngine {
     const side = CELL * 0.2; // separación lateral (perpendicular a la dirección)
     const white = CELL * 0.11;
     const pupil = CELL * 0.06;
-    for (const s of [-1, 1]) {
+    for (let i = 0; i < EYE_SIDES.length; i++) {
+      const s = EYE_SIDES[i];
       const ex = cx - d.y * side * s;
       const ey = cy + d.x * side * s;
       const qx = ex + d.x * pupil * 0.6;
@@ -478,9 +608,20 @@ export class SnakeEngine {
     if (this.snake.length > 0) this.drawEyes(this.snake[0]);
   }
 
+  // Franja y textos del HUD (SCORE a la izquierda, NIVEL a la derecha). Se dibuja
+  // directo en cada frame: el texto rasterizado en un OffscreenCanvas no sale idéntico
+  // al del canvas visible, así que solo se cachean los strings.
   private drawHUD() {
     const ctx = this.ctx;
     const sk = this.activeSkin;
+    if (this.score !== this.hudScore) {
+      this.hudScore = this.score;
+      this.hudScoreText = `SCORE ${this.score}`;
+    }
+    if (this.level !== this.hudLevel) {
+      this.hudLevel = this.level;
+      this.hudLevelText = `NIVEL ${this.level}`;
+    }
     ctx.fillStyle = sk.colors.hudBg;
     ctx.fillRect(0, 0, this.width, HUD_HEIGHT);
 
@@ -493,10 +634,10 @@ export class SnakeEngine {
     }
 
     ctx.textAlign = "left";
-    ctx.fillText(`SCORE ${this.score}`, 8, 15);
+    ctx.fillText(this.hudScoreText, 8, 15);
 
     ctx.textAlign = "right";
-    ctx.fillText(`NIVEL ${this.level}`, this.width - 8, 15);
+    ctx.fillText(this.hudLevelText, this.width - 8, 15);
     ctx.restore();
   }
 

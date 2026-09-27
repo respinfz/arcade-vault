@@ -53,6 +53,10 @@ export const TetrisGame = forwardRef<TetrisGameHandle, TetrisGameProps>(
       pausedRef.current = paused;
     }, [paused]);
 
+    // En pausa el loop no redibuja (SPEC 13): reiniciar o terminar la partida
+    // estando en pausa pide un frame nuevo para que la imagen quede al día.
+    const redrawRef = useRef(false);
+
     const onScoreChangeRef = useRef(onScoreChange);
     const onLivesChangeRef = useRef(onLivesChange);
     const onLevelChangeRef = useRef(onLevelChange);
@@ -67,8 +71,14 @@ export const TetrisGame = forwardRef<TetrisGameHandle, TetrisGameProps>(
     useImperativeHandle(
       ref,
       () => ({
-        restart: () => engineRef.current?.restart(),
-        forceGameOver: () => engineRef.current?.forceGameOver(),
+        restart: () => {
+          engineRef.current?.restart();
+          redrawRef.current = true;
+        },
+        forceGameOver: () => {
+          engineRef.current?.forceGameOver();
+          redrawRef.current = true;
+        },
         pressLeft: (held: boolean) => {
           pressHeld(inputRef.current, "ArrowLeft", held);
         },
@@ -102,6 +112,7 @@ export const TetrisGame = forwardRef<TetrisGameHandle, TetrisGameProps>(
       let prevLines = engine.lines;
       let prevLevel = engine.level;
       let prevState = engine.state;
+      let wasPaused = false;
 
       onScoreChangeRef.current(prevScore);
       onLivesChangeRef.current(prevLines);
@@ -112,10 +123,18 @@ export const TetrisGame = forwardRef<TetrisGameHandle, TetrisGameProps>(
           lastTime === null ? 0 : Math.min((ts - lastTime) / 1000, 0.05);
         lastTime = ts;
 
-        if (!pausedRef.current) {
+        // En pausa se congela update() y la imagen no cambia: se dibuja solo en el
+        // primer frame de la pausa y si se pidió un redibujo (reinicio / fin forzado).
+        // El loop sigue vivo y lastTime avanza, así que al reanudar el dt no salta.
+        const paused = pausedRef.current;
+        if (!paused) {
           engine.update(dt);
+          engine.draw();
+        } else if (!wasPaused || redrawRef.current) {
+          engine.draw();
         }
-        engine.draw();
+        redrawRef.current = false;
+        wasPaused = paused;
 
         if (engine.score !== prevScore) {
           prevScore = engine.score;
