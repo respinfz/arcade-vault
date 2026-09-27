@@ -45,21 +45,44 @@ const LIFE_VERTS: Vert[] = [
 
 /* ---- Helpers de dibujo por skin (equivalentes a drawBlock() del Tetris) ---- */
 
+// Rendimiento (SPEC 13): las rutinas de dibujo pintan tanto en el canvas visible como
+// en la capa offscreen del fondo, así que aceptan ambos contextos.
+type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+// Colores derivados memoizados: shade() se llama varias veces por roca y por frame en
+// las skins pixel/rounded; sin caché parseaba el hex y creaba un string en cada llamada.
+const shadeCache = new Map<string, string>(); // clave `${hex}|${amt}`
+
 /* Aclara (amt > 0) u oscurece (amt < 0) un color '#rgb' o '#rrggbb'. */
 function shade(hex: string, amt: number): string {
+  const key = `${hex}|${amt}`;
+  const cached = shadeCache.get(key);
+  if (cached !== undefined) return cached;
   let h = hex.slice(1);
   if (h.length === 3) h = h.replace(/./g, (c) => c + c);
   const n = parseInt(h, 16);
   const clamp = (v: number) =>
     Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
-  return `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  const out = `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  shadeCache.set(key, out);
+  return out;
 }
+
+// Radio máximo por silueta: las rocas y la nave tienen vértices fijos, así que se
+// calcula una vez (sin arrays temporales por frame). La llama cambia de forma en cada
+// frame y no se cachea (el WeakMap no la retiene).
+const maxRadiusCache = new WeakMap<Vert[], number>();
 
 function maxRadius(verts: Vert[]): number {
-  return Math.max(...verts.map(([vx, vy]) => Math.hypot(vx, vy)));
+  const cached = maxRadiusCache.get(verts);
+  if (cached !== undefined) return cached;
+  let r = -Infinity;
+  for (const [vx, vy] of verts) r = Math.max(r, Math.hypot(vx, vy));
+  maxRadiusCache.set(verts, r);
+  return r;
 }
 
-function polyPath(ctx: CanvasRenderingContext2D, verts: Vert[]) {
+function polyPath(ctx: Ctx2D, verts: Vert[]) {
   ctx.beginPath();
   ctx.moveTo(verts[0][0], verts[0][1]);
   for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i][0], verts[i][1]);
@@ -67,7 +90,7 @@ function polyPath(ctx: CanvasRenderingContext2D, verts: Vert[]) {
 }
 
 /* Contorno suavizado: curvas cuadráticas entre los puntos medios de cada arista. */
-function smoothPath(ctx: CanvasRenderingContext2D, verts: Vert[]) {
+function smoothPath(ctx: Ctx2D, verts: Vert[]) {
   const n = verts.length;
   const mid = (i: number): Vert => {
     const a = verts[i % n];
@@ -88,8 +111,11 @@ function smoothPath(ctx: CanvasRenderingContext2D, verts: Vert[]) {
 function pointInPoly(x: number, y: number, verts: Vert[]): boolean {
   let inside = false;
   for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
-    const [xi, yi] = verts[i];
-    const [xj, yj] = verts[j];
+    // acceso indexado (sin desestructurar) en el camino caliente del estilo pixel
+    const xi = verts[i][0];
+    const yi = verts[i][1];
+    const xj = verts[j][0];
+    const yj = verts[j][1];
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
       inside = !inside;
   }
@@ -99,9 +125,113 @@ function pointInPoly(x: number, y: number, verts: Vert[]): boolean {
 /* Rasteriza un polígono rotado sobre una rejilla alineada al mundo (celdas de `cell`
    px): color base + textura determinista de luces/sombras + borde oscuro, como
    drawPixelTexture() del Tetris. La textura se ancla al centro del cuerpo, así que no
-   parpadea al desplazarse. */
+   parpadea al desplazarse.
+   Rendimiento (SPEC 13): la rasterización depende de la rotación y de la posición
+   (rejilla alineada al mundo), así que no se puede cachear como sprite. En su lugar:
+   - máscara y tonos en buffers reutilizados (sin arrays por frame);
+   - las celdas se escriben a 1 px por celda en un ImageData, se suben a un lienzo
+     auxiliar y se copian con un único drawImage escalado ×cell sin suavizado (antes,
+     ~250 fillRect() con su cambio de fillStyle por cuerpo). Cada celda es un bloque
+     entero de color opaco, así que el resultado es idéntico píxel a píxel;
+   - respaldo sin OffscreenCanvas: un path de rect() y un fill() por tono (idéntico
+     también: rectángulos de coordenadas enteras que no se solapan). */
+let pixelMask = new Uint8Array(1024);
+let pixelTone = new Uint8Array(1024);
+const NO_CELL = 255;
+const TONE_AMTS = [0, 0.16, -0.2, -0.4]; // base, luz, sombra, borde (como shade())
+
+// hex → RGB de los 4 tonos (12 bytes), con la misma fórmula que shade().
+const toneRgbCache = new Map<string, Uint8Array>();
+function toneRgb(hex: string): Uint8Array {
+  const cached = toneRgbCache.get(hex);
+  if (cached) return cached;
+  let h = hex.slice(1);
+  if (h.length === 3) h = h.replace(/./g, (c) => c + c);
+  const n = parseInt(h, 16);
+  const out = new Uint8Array(12);
+  for (let t = 0; t < 4; t++) {
+    const amt = TONE_AMTS[t];
+    const clamp = (v: number) =>
+      Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
+    out[t * 3] = clamp((n >> 16) & 255);
+    out[t * 3 + 1] = clamp((n >> 8) & 255);
+    out[t * 3 + 2] = clamp(n & 255);
+  }
+  toneRgbCache.set(hex, out);
+  return out;
+}
+
+// Lienzo auxiliar de 1 px por celda (compartido; se usa de forma síncrona).
+let cellCanvas: OffscreenCanvas | null = null;
+let cellCtx: OffscreenCanvasRenderingContext2D | null = null;
+let cellImage: ImageData | null = null;
+
+// Pinta las celdas de `tone` con un solo drawImage. false = sin OffscreenCanvas (el
+// llamador usa el respaldo con rect()).
+function blitPixelCells(
+  ctx: Ctx2D,
+  tone: Uint8Array,
+  gx0: number,
+  gy0: number,
+  cols: number,
+  rows: number,
+  cell: number,
+  color: string,
+): boolean {
+  if (
+    !cellCanvas ||
+    !cellCtx ||
+    !cellImage ||
+    cellImage.width < cols ||
+    cellImage.height < rows
+  ) {
+    if (typeof OffscreenCanvas === "undefined") return false;
+    const w = Math.max(32, cols, cellImage?.width ?? 0);
+    const h = Math.max(32, rows, cellImage?.height ?? 0);
+    const canvas = new OffscreenCanvas(w, h);
+    const c = canvas.getContext("2d", { willReadFrequently: true });
+    if (!c) return false;
+    cellCanvas = canvas;
+    cellCtx = c;
+    cellImage = c.createImageData(w, h);
+  }
+  const data = cellImage.data;
+  const stride = cellImage.width * 4;
+  const rgb = toneRgb(color);
+  for (let iy = 0; iy < rows; iy++) {
+    for (let ix = 0; ix < cols; ix++) {
+      const t = tone[iy * cols + ix];
+      const o = iy * stride + ix * 4;
+      if (t === NO_CELL) {
+        data[o + 3] = 0;
+      } else {
+        data[o] = rgb[t * 3];
+        data[o + 1] = rgb[t * 3 + 1];
+        data[o + 2] = rgb[t * 3 + 2];
+        data[o + 3] = 255;
+      }
+    }
+  }
+  cellCtx.putImageData(cellImage, 0, 0, 0, 0, cols, rows);
+  const smoothing = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    cellCanvas,
+    0,
+    0,
+    cols,
+    rows,
+    gx0 * cell,
+    gy0 * cell,
+    cols * cell,
+    rows * cell,
+  );
+  ctx.imageSmoothingEnabled = smoothing;
+  return true;
+}
+
 function drawPixelPoly(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2D,
   x: number,
   y: number,
   rot: number,
@@ -119,7 +249,8 @@ function drawPixelPoly(
   const ox = Math.floor(x / cell);
   const oy = Math.floor(y / cell);
 
-  const mask: boolean[] = new Array(cols * rows);
+  if (pixelMask.length < cols * rows) pixelMask = new Uint8Array(cols * rows);
+  const mask = pixelMask;
   for (let iy = 0; iy < rows; iy++) {
     for (let ix = 0; ix < cols; ix++) {
       const dx = (gx0 + ix + 0.5) * cell - x;
@@ -129,18 +260,25 @@ function drawPixelPoly(
         dx * cos + dy * sin,
         -dx * sin + dy * cos,
         verts,
-      );
+      )
+        ? 1
+        : 0;
     }
   }
   const at = (ix: number, iy: number) =>
-    ix >= 0 && iy >= 0 && ix < cols && iy < rows && mask[iy * cols + ix];
+    ix >= 0 && iy >= 0 && ix < cols && iy < rows && mask[iy * cols + ix] === 1;
 
-  const light = shade(color, 0.16);
-  const dark = shade(color, -0.2);
-  const edge = shade(color, -0.4);
+  // Tono de cada celda (0 = base, 1 = luz, 2 = sombra, 3 = borde, NO_CELL = vacía),
+  // con la misma regla que antes; luego un path y un fill() por tono.
+  if (pixelTone.length < cols * rows) pixelTone = new Uint8Array(cols * rows);
+  const tone = pixelTone;
   for (let iy = 0; iy < rows; iy++) {
     for (let ix = 0; ix < cols; ix++) {
-      if (!at(ix, iy)) continue;
+      const i = iy * cols + ix;
+      if (!at(ix, iy)) {
+        tone[i] = NO_CELL;
+        continue;
+      }
       const isEdge =
         !at(ix - 1, iy) ||
         !at(ix + 1, iy) ||
@@ -149,8 +287,32 @@ function drawPixelPoly(
       const rx = gx0 + ix - ox;
       const ry = gy0 + iy - oy;
       const h = (((rx * 7 + ry * 13 + rx * ry * 3) % 5) + 5) % 5;
-      ctx.fillStyle = isEdge ? edge : h === 0 ? light : h === 1 ? dark : color;
-      ctx.fillRect((gx0 + ix) * cell, (gy0 + iy) * cell, cell, cell);
+      tone[i] = isEdge ? 3 : h === 0 ? 1 : h === 1 ? 2 : 0;
+    }
+  }
+  if (blitPixelCells(ctx, tone, gx0, gy0, cols, rows, cell, color)) return;
+
+  // Respaldo sin OffscreenCanvas: un path de rect() y un fill() por tono.
+  for (let t = 0; t < 4; t++) {
+    let any = false;
+    ctx.beginPath();
+    for (let iy = 0; iy < rows; iy++) {
+      for (let ix = 0; ix < cols; ix++) {
+        if (tone[iy * cols + ix] !== t) continue;
+        ctx.rect((gx0 + ix) * cell, (gy0 + iy) * cell, cell, cell);
+        any = true;
+      }
+    }
+    if (any) {
+      ctx.fillStyle =
+        t === 0
+          ? color
+          : t === 1
+            ? shade(color, 0.16)
+            : t === 2
+              ? shade(color, -0.2)
+              : shade(color, -0.4);
+      ctx.fill();
     }
   }
 }
@@ -159,7 +321,7 @@ function drawPixelPoly(
    skin. `lineWidth` aplica a los estilos de trazo (flat/glow); `cell` al pixel;
    `smooth` suaviza el contorno en rounded (rocas). */
 function drawBody(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2D,
   sk: AsteroidsSkin,
   x: number,
   y: number,
@@ -258,7 +420,7 @@ class Bullet {
     if (this.ttl <= 0) this.dead = true;
   }
 
-  draw(ctx: CanvasRenderingContext2D, sk: AsteroidsSkin) {
+  draw(ctx: Ctx2D, sk: AsteroidsSkin) {
     const color = sk.colors.bullet;
     if (sk.style === "pixel") {
       ctx.fillStyle = color;
@@ -337,7 +499,7 @@ class Asteroid {
     ];
   }
 
-  draw(ctx: CanvasRenderingContext2D, sk: AsteroidsSkin) {
+  draw(ctx: Ctx2D, sk: AsteroidsSkin) {
     const color = sk.colors.asteroid[this.size - 1];
     drawBody(ctx, sk, this.x, this.y, this.rot, this.verts, color, {
       lineWidth: 1.5,
@@ -411,7 +573,7 @@ class Ship {
     return [new Bullet(ox, oy, this.angle)];
   }
 
-  draw(ctx: CanvasRenderingContext2D, sk: AsteroidsSkin) {
+  draw(ctx: Ctx2D, sk: AsteroidsSkin) {
     if (this.dead) return;
     // Parpadeo durante invencibilidad de reaparición
     if (this.invincible > 0 && Math.floor(this.invincible * 8) % 2 === 0)
@@ -487,7 +649,7 @@ class Particle {
     if (this.ttl <= 0) this.dead = true;
   }
 
-  draw(ctx: CanvasRenderingContext2D, sk: AsteroidsSkin) {
+  draw(ctx: Ctx2D, sk: AsteroidsSkin) {
     const color = sk.colors.particle ?? this.color;
     ctx.save();
     ctx.globalAlpha = this.ttl / this.life;
@@ -535,8 +697,18 @@ export class AsteroidsEngine {
   // Campo de estrellas decorativo: semilla fija para que no cambie entre frames
   private stars: { x: number; y: number; s: number }[] = [];
 
+  // Rendimiento (SPEC 13): fondo estático (color + estrellas) pintado una vez por skin
+  // en una capa offscreen y copiado con un solo drawImage por frame. null = sin
+  // construir (o sin OffscreenCanvas: se dibuja directo, igual que antes).
+  private bgLayer: OffscreenCanvas | null = null;
+  // Textos del HUD: se regeneran solo cuando cambia el valor (sin strings por frame).
+  private hudScore = -1;
+  private hudScoreText = "";
+  private hudLevel = -1;
+  private hudLevelText = "";
+
   constructor(
-    private ctx: CanvasRenderingContext2D,
+    private ctx: Ctx2D,
     private width: number,
     private height: number,
     private input: EngineInput,
@@ -558,8 +730,10 @@ export class AsteroidsEngine {
   }
 
   // Cambia solo la apariencia: no reinicia la partida ni toca score/estado.
+  // Vacía las cachés de dibujo que dependen de la skin.
   setSkin(id: string | null | undefined) {
     this.skin = resolveSkin(id);
+    this.bgLayer = null;
   }
 
   private get sk(): AsteroidsSkin {
@@ -731,27 +905,70 @@ export class AsteroidsEngine {
       ctx.shadowBlur = 8;
     }
 
+    if (this.score !== this.hudScore) {
+      this.hudScore = this.score;
+      this.hudScoreText = `SCORE  ${this.score}`;
+    }
+    if (this.level !== this.hudLevel) {
+      this.hudLevel = this.level;
+      this.hudLevelText = `NIVEL ${this.level}`;
+    }
+
     ctx.textAlign = "left";
-    ctx.fillText(`SCORE  ${this.score}`, 14, 26);
+    ctx.fillText(this.hudScoreText, 14, 26);
 
     ctx.textAlign = "center";
-    ctx.fillText(`NIVEL ${this.level}`, this.width / 2, 26);
+    ctx.fillText(this.hudLevelText, this.width / 2, 26);
     ctx.restore();
 
     for (let i = 0; i < this.lives; i++)
       this.drawLifeIcon(this.width - 16 - i * 22, 18);
   }
 
+  private drawBackground() {
+    const ctx = this.ctx;
+    ctx.fillStyle = this.sk.boardBg;
+    ctx.fillRect(0, 0, this.width, this.height);
+    this.drawStars();
+  }
+
+  // Redirige this.ctx a `target` mientras dura `draw`: las rutinas de dibujo existentes
+  // pintan sin cambios en el canvas visible o en una caché offscreen.
+  private drawInto(target: Ctx2D, draw: () => void): void {
+    const prev = this.ctx;
+    this.ctx = target;
+    try {
+      draw();
+    } finally {
+      this.ctx = prev;
+    }
+  }
+
+  // Capa del fondo estático, construida bajo demanda por skin. null sin
+  // OffscreenCanvas (el motor no toca window/document): se dibuja directo.
+  private getBgLayer(): OffscreenCanvas | null {
+    if (this.bgLayer) return this.bgLayer;
+    if (typeof OffscreenCanvas === "undefined") return null;
+    const layer = new OffscreenCanvas(this.width, this.height);
+    const layerCtx = layer.getContext("2d");
+    if (!layerCtx) return null;
+    this.drawInto(layerCtx, () => this.drawBackground());
+    this.bgLayer = layer;
+    return layer;
+  }
+
   draw() {
     const ctx = this.ctx;
     const sk = this.sk;
-    ctx.fillStyle = sk.boardBg;
-    ctx.fillRect(0, 0, this.width, this.height);
-    this.drawStars();
+    const bg = this.getBgLayer();
+    if (bg) ctx.drawImage(bg, 0, 0);
+    else this.drawBackground();
 
-    this.particles.forEach((p) => p.draw(ctx, sk));
-    this.asteroids.forEach((a) => a.draw(ctx, sk));
-    this.bullets.forEach((b) => b.draw(ctx, sk));
+    // Bucles indexados: sin closures nuevas por frame.
+    const { particles, asteroids, bullets } = this;
+    for (let i = 0; i < particles.length; i++) particles[i].draw(ctx, sk);
+    for (let i = 0; i < asteroids.length; i++) asteroids[i].draw(ctx, sk);
+    for (let i = 0; i < bullets.length; i++) bullets[i].draw(ctx, sk);
     this.ship.draw(ctx, sk);
 
     this.drawHUD();

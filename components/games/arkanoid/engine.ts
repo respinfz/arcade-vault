@@ -177,8 +177,27 @@ interface BreakFlash {
 
 /* ---- Helpers de dibujo por skin (equivalentes a drawBlock() del Tetris) ---- */
 
+// Contexto visible o de una caché offscreen (SPEC 13): las rutinas de dibujo sirven
+// para ambos sin cambios.
+type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+// Forma pre-renderizada (ladrillo o pala) para la skin activa. (ox, oy) es el
+// desplazamiento del origen de la forma dentro del sprite: el margen del halo.
+interface Sprite {
+  canvas: OffscreenCanvas;
+  ox: number;
+  oy: number;
+}
+
+// Margen de los sprites: el shadowBlur más grande (14, pala neón) llega a ~1,5 × blur.
+const SPRITE_PAD = 22;
+
+// Fuentes del HUD precalculadas (antes se armaba el string en cada frame).
+const HUD_FONT = "12px monospace";
+const HUD_FONT_BOLD = "bold 12px monospace";
+
 function roundRectPath(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2D,
   x: number,
   y: number,
   w: number,
@@ -195,20 +214,31 @@ function roundRectPath(
   ctx.closePath();
 }
 
+// Memo de colores derivados (SPEC 13): shade() parseaba el hex y creaba un string
+// en cada llamada, varias veces por ladrillo y por frame.
+const shadeCache = new Map<string, string>(); // clave `${color}|${amt}`
+
 // Aclara (amt > 0) u oscurece (amt < 0) un color '#rrggbb'. Solo se usa con las skins
 // que definen sus colores en hex (pixel); ante otro formato devuelve el color tal cual.
 function shade(color: string, amt: number): string {
-  if (!/^#[0-9a-f]{6}$/i.test(color)) return color;
-  const n = parseInt(color.slice(1), 16);
-  const clamp = (v: number) =>
-    Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
-  return `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  const key = `${color}|${amt}`;
+  const cached = shadeCache.get(key);
+  if (cached !== undefined) return cached;
+  let out = color;
+  if (/^#[0-9a-f]{6}$/i.test(color)) {
+    const n = parseInt(color.slice(1), 16);
+    const clamp = (v: number) =>
+      Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
+    out = `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+  }
+  shadeCache.set(key, out);
+  return out;
 }
 
 // Textura de píxeles determinista (no parpadea entre frames) sobre un rectángulo, en
 // celdas de `cell` px, con luces/sombras y borde oscuro (drawPixelTexture del Tetris).
 function drawPixelTexture(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2D,
   x: number,
   y: number,
   w: number,
@@ -241,7 +271,7 @@ function drawPixelTexture(
 
 // Ladrillo (o destello de ladrillo) según el `style` de la skin.
 function drawBrick(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2D,
   sk: ArkanoidSkin,
   x: number,
   y: number,
@@ -310,8 +340,25 @@ export class ArkanoidEngine {
   private blocks: Block[] = [];
   private breakFlashes: BreakFlash[] = [];
 
+  // Cachés de render (SPEC 13), solo apariencia: se vacían en setSkin() y no
+  // participan de la lógica de juego. Sin OffscreenCanvas quedan vacías y todo se
+  // dibuja directo, como el original.
+  private bgLayer: OffscreenCanvas | null = null; // fondo + campo + rejilla + borde
+  private brickSprites = new Map<string, Sprite>(); // clave: color lógico (+ variante pixel)
+  private paddleSprites = new Map<number, Sprite>(); // clave numérica: ancho (+ fase pixel)
+  // Clave de la variante pixel de cada ladrillo, precalculada para no crear strings
+  // por frame. Los ladrillos de un nivel viejo se liberan solos.
+  private pixelBrickKeys = new WeakMap<Block, string>();
+  // Textos del HUD cacheados: se regeneran solo cuando cambia su valor.
+  private hudScore = -1;
+  private hudLevel = -1;
+  private hudLives = -1;
+  private hudScoreText = "";
+  private hudLevelText = "";
+  private hudLivesText = "";
+
   constructor(
-    private ctx: CanvasRenderingContext2D,
+    private ctx: Ctx2D,
     private width: number,
     private height: number,
     private input: EngineInput,
@@ -322,6 +369,9 @@ export class ArkanoidEngine {
   // Cambia la skin en caliente (id inválido = "retro"). No reinicia la partida.
   setSkin(id: string | null | undefined) {
     this.skin = resolveSkin(id);
+    this.bgLayer = null;
+    this.brickSprites.clear();
+    this.paddleSprites.clear();
   }
 
   private get sk(): ArkanoidSkin {
@@ -590,9 +640,162 @@ export class ArkanoidEngine {
     ctx.globalAlpha = 1;
   }
 
-  private drawPaddle(sk: ArkanoidSkin) {
+  // Ejecuta `draw` sobre otro contexto (una caché offscreen): las rutinas de dibujo
+  // usan this.ctx, así que se redirige mientras dura (técnica de Frogger).
+  private drawInto(target: Ctx2D, draw: () => void) {
+    const main = this.ctx;
+    this.ctx = target;
+    try {
+      draw();
+    } finally {
+      this.ctx = main;
+    }
+  }
+
+  // Canvas offscreen con su contexto; null sin OffscreenCanvas (el motor no toca
+  // window/document): quien llama dibuja directo.
+  private newLayer(
+    w: number,
+    h: number,
+  ): {
+    canvas: OffscreenCanvas;
+    ctx: OffscreenCanvasRenderingContext2D;
+  } | null {
+    if (typeof OffscreenCanvas === "undefined") return null;
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    return ctx ? { canvas, ctx } : null;
+  }
+
+  // Fondo estático de la skin activa (canvas + campo + rejilla + borde), pintado una
+  // vez y copiado con un solo drawImage por frame.
+  private drawBackground(sk: ArkanoidSkin) {
+    if (!this.bgLayer) {
+      const layer = this.newLayer(this.width, this.height);
+      if (layer) {
+        this.drawInto(layer.ctx, () => this.drawStaticBackground(sk));
+        this.bgLayer = layer.canvas;
+      }
+    }
+    if (this.bgLayer) this.ctx.drawImage(this.bgLayer, 0, 0);
+    else this.drawStaticBackground(sk);
+  }
+
+  private drawStaticBackground(sk: ArkanoidSkin) {
     const ctx = this.ctx;
+    ctx.fillStyle = sk.outerBg;
+    ctx.fillRect(0, 0, this.width, this.height);
+    this.drawBoard(sk);
+  }
+
+  // Sprite de un ladrillo (con halo, redondeo o textura ya aplicados). Se pinta en
+  // las coordenadas reales del primer ladrillo que lo pide (trasladando el contexto),
+  // así la textura pixel conserva su semilla; la clave distingue sus 5 variantes.
+  private getBrickSprite(
+    sk: ArkanoidSkin,
+    block: Block,
+    key: string,
+  ): Sprite | null {
+    const cached = this.brickSprites.get(key);
+    if (cached) return cached;
+    const layer = this.newLayer(
+      block.w + SPRITE_PAD * 2,
+      block.h + SPRITE_PAD * 2,
+    );
+    if (!layer) return null;
+    layer.ctx.translate(SPRITE_PAD - block.x, SPRITE_PAD - block.y);
+    drawBrick(
+      layer.ctx,
+      sk,
+      block.x,
+      block.y,
+      block.w,
+      block.h,
+      sk.colors.bricks[block.color],
+    );
+    const sprite: Sprite = {
+      canvas: layer.canvas,
+      ox: SPRITE_PAD,
+      oy: SPRITE_PAD,
+    };
+    this.brickSprites.set(key, sprite);
+    return sprite;
+  }
+
+  // Clave de sprite de un ladrillo. En pixel la textura depende de la semilla por
+  // posición, y el patrón solo varía con (semilla % 5): 5 variantes por color.
+  private brickKey(sk: ArkanoidSkin, block: Block): string {
+    if (sk.style !== "pixel") return block.color;
+    let key = this.pixelBrickKeys.get(block);
+    if (key === undefined) {
+      // misma semilla que drawPixelTexture(x + 1, y + 1, …) en drawBrick()
+      const seed =
+        Math.floor((block.x + 1) / 4) * 3 + Math.floor((block.y + 1) / 4) * 5;
+      key = `${block.color}|${seed % 5}`;
+      this.pixelBrickKeys.set(block, key);
+    }
+    return key;
+  }
+
+  private drawBricks(sk: ArkanoidSkin) {
+    const ctx = this.ctx;
+    // flat: un fillRect por ladrillo ya es lo más barato; se dibuja como el original
+    const useSprites = sk.style !== "flat";
+    for (const block of this.blocks) {
+      if (!block.alive) continue;
+      const sprite = useSprites
+        ? this.getBrickSprite(sk, block, this.brickKey(sk, block))
+        : null;
+      if (sprite) {
+        // posiciones de ladrillo siempre enteras: la copia es exacta
+        ctx.drawImage(sprite.canvas, block.x - sprite.ox, block.y - sprite.oy);
+      } else {
+        drawBrick(
+          ctx,
+          sk,
+          block.x,
+          block.y,
+          block.w,
+          block.h,
+          sk.colors.bricks[block.color],
+        );
+      }
+    }
+  }
+
+  // La pala cambia de ancho por nivel y se mueve de a 6 px desde posiciones enteras.
+  // En pixel su textura depende de x: el patrón se repite cada 20 px (semilla % 5 con
+  // celdas de 4 px), así que la clave incluye x % 20.
+  private drawPaddle(sk: ArkanoidSkin) {
     const { x, y, w, h } = this.paddle;
+    if (sk.style !== "flat" && Number.isInteger(x) && Number.isInteger(w)) {
+      const key = sk.style === "pixel" ? w * 20 + (x % 20) : w * 20;
+      let sprite = this.paddleSprites.get(key);
+      if (!sprite) {
+        const layer = this.newLayer(w + SPRITE_PAD * 2, h + SPRITE_PAD * 2);
+        if (layer) {
+          layer.ctx.translate(SPRITE_PAD - x, SPRITE_PAD - y);
+          this.drawInto(layer.ctx, () => this.drawPaddleShape(sk, x, y, w, h));
+          sprite = { canvas: layer.canvas, ox: SPRITE_PAD, oy: SPRITE_PAD };
+          this.paddleSprites.set(key, sprite);
+        }
+      }
+      if (sprite) {
+        this.ctx.drawImage(sprite.canvas, x - sprite.ox, y - sprite.oy);
+        return;
+      }
+    }
+    this.drawPaddleShape(sk, x, y, w, h);
+  }
+
+  private drawPaddleShape(
+    sk: ArkanoidSkin,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ) {
+    const ctx = this.ctx;
     const color = sk.colors.paddle;
 
     if (sk.style === "glow") {
@@ -677,24 +880,12 @@ export class ArkanoidEngine {
     }
   }
 
+  // El campo vacío (drawBoard) va en la capa de fondo, ver drawBackground().
   private drawField() {
-    const ctx = this.ctx;
     const sk = this.sk;
-    this.drawBoard(sk);
+    this.drawBricks(sk);
 
-    for (const block of this.blocks) {
-      if (!block.alive) continue;
-      drawBrick(
-        ctx,
-        sk,
-        block.x,
-        block.y,
-        block.w,
-        block.h,
-        sk.colors.bricks[block.color],
-      );
-    }
-
+    // Destellos: pocos y con alpha por operación; se dibujan directo como el original.
     for (const flash of this.breakFlashes) this.drawFlash(sk, flash);
 
     this.drawPaddle(sk);
@@ -705,30 +896,51 @@ export class ArkanoidEngine {
   private setTextStyle(sk: ArkanoidSkin, size: number, bold = false) {
     const ctx = this.ctx;
     ctx.fillStyle = sk.colors.hud;
-    ctx.font = `${bold || sk.style === "pixel" ? "bold " : ""}${size}px monospace`;
+    ctx.font =
+      size === 12 && !bold
+        ? sk.style === "pixel"
+          ? HUD_FONT_BOLD
+          : HUD_FONT
+        : `${bold || sk.style === "pixel" ? "bold " : ""}${size}px monospace`;
     if (sk.style === "glow") {
       ctx.shadowColor = sk.colors.hud;
       ctx.shadowBlur = 8;
     }
   }
 
+  // Los textos del HUD se dibujan directo en cada frame (en una capa offscreen el
+  // texto sale con otro espaciado), pero sus strings solo se regeneran cuando
+  // cambia el valor: sin basura por frame.
   private drawHUD() {
     const ctx = this.ctx;
     const sk = this.sk;
     ctx.fillStyle = sk.colors.hudBg;
     ctx.fillRect(0, 0, this.width, HUD_HEIGHT);
 
+    if (this.hudScore !== this.score) {
+      this.hudScore = this.score;
+      this.hudScoreText = `SCORE ${this.score}`;
+    }
+    if (this.hudLevel !== this.level) {
+      this.hudLevel = this.level;
+      this.hudLevelText = `NIVEL ${this.level}/5`;
+    }
+    if (this.hudLives !== this.lives) {
+      this.hudLives = this.lives;
+      this.hudLivesText = `VIDAS ${this.lives}`;
+    }
+
     ctx.save();
     this.setTextStyle(sk, 12);
 
     ctx.textAlign = "left";
-    ctx.fillText(`SCORE ${this.score}`, 8, 14);
+    ctx.fillText(this.hudScoreText, 8, 14);
 
     ctx.textAlign = "center";
-    ctx.fillText(`NIVEL ${this.level}/5`, this.width / 2, 14);
+    ctx.fillText(this.hudLevelText, this.width / 2, 14);
 
     ctx.textAlign = "right";
-    ctx.fillText(`VIDAS ${this.lives}`, this.width - 8, 14);
+    ctx.fillText(this.hudLivesText, this.width - 8, 14);
     ctx.restore();
   }
 
@@ -757,10 +969,7 @@ export class ArkanoidEngine {
   }
 
   draw() {
-    const ctx = this.ctx;
-    ctx.fillStyle = this.sk.outerBg;
-    ctx.fillRect(0, 0, this.width, this.height);
-
+    this.drawBackground(this.sk);
     this.drawField();
     this.drawHUD();
 

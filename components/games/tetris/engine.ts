@@ -144,6 +144,17 @@ export class TetrisEngine {
   private now = 0; // reloj interno del motor (ms), avanza con dt en vez de usar performance.now()
   private moveTimers = { left: 0, right: 0, down: 0 };
 
+  // Textos del panel cacheados (SPEC 13): se regeneran solo cuando cambia el valor,
+  // así draw() no crea strings (ni llama a toLocaleString) en cada frame.
+  private hudScore = -1;
+  private hudScoreText = "";
+  private hudLines = -1;
+  private hudLinesText = "";
+  private hudLevel = -1;
+  private hudLevelText = "";
+  private hudMult = -1;
+  private hudMultText = "";
+
   constructor(
     private ctx: CanvasRenderingContext2D,
     private width: number,
@@ -559,8 +570,14 @@ export class TetrisEngine {
       for (let c = 0; c < COLS; c++)
         this.drawBlock(BOARD_X + c * BLOCK, r * BLOCK, this.board[r][c], BLOCK);
 
-    this.blasts = this.blasts.filter((b) => this.now - b.t < BLAST_MS);
-    for (const b of this.blasts) {
+    // Descarta los destellos vencidos en el mismo array (sin crear uno nuevo por frame);
+    // equivale al filter() original, conservando el orden.
+    const blasts = this.blasts;
+    let kept = 0;
+    for (let i = 0; i < blasts.length; i++)
+      if (this.now - blasts[i].t < BLAST_MS) blasts[kept++] = blasts[i];
+    blasts.length = kept;
+    for (const b of blasts) {
       const p = (this.now - b.t) / BLAST_MS;
       ctx.globalAlpha = 1 - p;
       ctx.fillStyle = p < 0.5 ? "#fff3e0" : b.color;
@@ -601,6 +618,18 @@ export class TetrisEngine {
     }
   }
 
+  // Un rótulo + valor del panel (antes era un closure creado en cada frame).
+  private drawStat(label: string, value: string, labelX: number, y: number) {
+    const ctx = this.ctx;
+    ctx.font = "13px monospace";
+    ctx.fillStyle = "#9aa0a6";
+    ctx.textAlign = "left";
+    ctx.fillText(label, labelX, y);
+    ctx.font = "28px monospace";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(value, labelX, y + 32);
+  }
+
   private drawPanel() {
     const ctx = this.ctx;
     ctx.fillStyle = "#000";
@@ -609,20 +638,25 @@ export class TetrisEngine {
     const labelX = PANEL_X + 30;
     let y = 50;
 
-    const stat = (label: string, value: string) => {
-      ctx.font = "13px monospace";
-      ctx.fillStyle = "#9aa0a6";
-      ctx.textAlign = "left";
-      ctx.fillText(label, labelX, y);
-      ctx.font = "28px monospace";
-      ctx.fillStyle = "#fff";
-      ctx.fillText(value, labelX, y + 32);
-      y += 90;
-    };
+    if (this.score !== this.hudScore) {
+      this.hudScore = this.score;
+      this.hudScoreText = this.score.toLocaleString();
+    }
+    if (this.lines !== this.hudLines) {
+      this.hudLines = this.lines;
+      this.hudLinesText = String(this.lines);
+    }
+    if (this.level !== this.hudLevel) {
+      this.hudLevel = this.level;
+      this.hudLevelText = String(this.level);
+    }
 
-    stat("SCORE", this.score.toLocaleString());
-    stat("LINES", String(this.lines));
-    stat("LEVEL", String(this.level));
+    this.drawStat("SCORE", this.hudScoreText, labelX, y);
+    y += 90;
+    this.drawStat("LINES", this.hudLinesText, labelX, y);
+    y += 90;
+    this.drawStat("LEVEL", this.hudLevelText, labelX, y);
+    y += 90;
 
     ctx.font = "13px monospace";
     ctx.fillStyle = "#9aa0a6";
@@ -653,9 +687,13 @@ export class TetrisEngine {
     ctx.textAlign = "left";
     ctx.fillText("COMBO", labelX, y);
     const mult = this.comboMult();
+    if (mult !== this.hudMult) {
+      this.hudMult = mult;
+      this.hudMultText = `x${mult}`;
+    }
     ctx.font = "28px monospace";
     ctx.fillStyle = mult >= 2 ? COMBO_COLORS[mult] || "#ba68c8" : "#fff";
-    ctx.fillText(`x${mult}`, labelX, y + 32);
+    ctx.fillText(this.hudMultText, labelX, y + 32);
   }
 
   draw() {
